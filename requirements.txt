@@ -1,0 +1,5 @@
+# 전체 설치: pip install -r requirements.txt
+# 패키지 추가는 아래 담당 파일에만 한다 (이 파일은 수정하지 않는다)
+-r requirements/common.txt
+-r requirements/issue.txt
+-r requirements/disclosure.txt

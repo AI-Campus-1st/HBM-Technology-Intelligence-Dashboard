@@ -1,0 +1,7 @@
+# [공동] 공통 패키지 — 추가 시 PR로 합의
+pandas
+numpy
+python-dotenv
+plotly
+streamlit
+pytest

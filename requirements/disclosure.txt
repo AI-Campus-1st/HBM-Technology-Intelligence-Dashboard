@@ -1,0 +1,7 @@
+# [B] DART 수집·RAG용 패키지
+requests
+lxml
+langchain
+langchain-openai
+langchain-community
+chromadb
