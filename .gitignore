@@ -10,6 +10,7 @@ data/db/**
 data/vectordb/**
 !data/**/
 !data/**/.gitkeep
+!data/**/README.md
 # data/labels(표본 검수 결과)는 작고 사람이 만든 결과라 커밋한다
 
 # ── 산출물 중 자동 생성물 ──
