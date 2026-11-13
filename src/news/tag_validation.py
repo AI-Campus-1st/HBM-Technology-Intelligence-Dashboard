@@ -28,12 +28,16 @@ from src.news.tagging import RULE_VERSION, TAG_RULES, tag_article
 
 PATTERNS = {tag: pattern for _, tag, pattern in TAG_RULES}
 
-# 검수할 층과 층별 표본 수. HBM은 분석의 중심축이라 등급마다 30건,
-# 기업 태그는 '핵심'(제목 포함)을 빼고 판단이 갈리는 '관련'·'언급'만 20건씩 본다.
+# 검수할 층과 층별 표본 수. HBM은 분석의 중심축이라 등급마다 30건.
+# 기업 태그는 실제 사용 방식(HBM 핵심·관련 기사 안에서만 집계)과 같은 조건에서 등급별로 본다.
 REVIEW_TARGETS = {
     "HBM": {"핵심": 30, "관련": 30, "언급": 30},
-    "SK하이닉스": {"관련": 20, "언급": 20},
-    "삼성전자": {"관련": 20, "언급": 20},
+    "SK하이닉스": {"핵심": 10, "관련": 15, "언급": 15},
+    "삼성전자": {"핵심": 10, "관련": 15, "언급": 15},
+}
+REVIEW_WITHIN = {
+    "SK하이닉스": ("HBM", ("핵심", "관련")),
+    "삼성전자": ("HBM", ("핵심", "관련")),
 }
 
 
@@ -99,13 +103,16 @@ class ReservoirSampler:
                 self.items[j] = item
 
 
-def build_review_sample(csv_path, start, end, targets: dict, seed: int = 42) -> pd.DataFrame:
+def build_review_sample(csv_path, start, end, targets: dict, seed: int = 42,
+                        within: Optional[dict] = None, exclude_urls: Optional[set] = None) -> pd.DataFrame:
     """뉴스 CSV를 청크로 읽어 규칙을 적용하고 (태그, 관련도) 층별 검수 표본을 만든다.
 
     Args:
         csv_path: 제공 뉴스 CSV 경로
         start, end: 분석 기간 (date, 양 끝 포함)
         targets: {태그: {관련도: 표본 수}} 검수할 층과 층별 표본 수
+        within: {태그: (필수 태그, 허용 관련도)} — 예) 기업 태그는 HBM 핵심·관련 기사에서만 뽑는다
+        exclude_urls: 이전 검수에 쓴 기사 URL. 같은 기사를 다시 뽑지 않아 독립된 표본이 된다
         seed: 재현용 난수 시드
 
     제목이 같은 기사는 첫 번째만 사용한다 (중복 기사가 표본에 여러 번 들어가지 않도록).
@@ -116,17 +123,24 @@ def build_review_sample(csv_path, start, end, targets: dict, seed: int = 42) -> 
             (t, lv, n) for t, levels in targets.items() for lv, n in levels.items()
         )
     }
+    within = within or {}
+    exclude_urls = exclude_urls or set()
     seen_titles: set = set()
     columns = ["제목", "본문전문", "원문URL", "발행일"]
     for chunk in pd.read_csv(csv_path, encoding="utf-8-sig", chunksize=10000, usecols=columns):
         dates = pd.to_datetime(chunk["발행일"], errors="coerce").dt.date
         chunk = chunk[(dates >= start) & (dates <= end)]
         for title, body, url, published in zip(chunk["제목"], chunk["본문전문"], chunk["원문URL"], chunk["발행일"]):
-            if title in seen_titles:
+            if title in seen_titles or url in exclude_urls:
                 continue
             seen_titles.add(title)
-            for row in tag_article(url, title, body):
+            rows = tag_article(url, title, body)
+            levels = {r["tag"]: r["relevance"] for r in rows}
+            for row in rows:
                 sampler = samplers.get((row["tag"], row["relevance"]))
+                condition = within.get(row["tag"])
+                if condition and levels.get(condition[0]) not in condition[1]:
+                    continue
                 if sampler:
                     sampler.add((row, title, body, str(published)[:10]))
 
@@ -153,7 +167,13 @@ def main(argv: Optional[list] = None) -> None:
     data_id = NEWS_CSV.name.split("_")[0]
     review_path = LABELS_DIR / f"tag_review_{RULE_VERSION}_{data_id}.csv"
     if args.step == "sample":
-        sample = build_review_sample(NEWS_CSV, ANALYSIS_START, ANALYSIS_END, REVIEW_TARGETS)
+        previous = set()
+        for old in LABELS_DIR.glob(f"tag_review_*_{data_id}.csv"):
+            if old != review_path:
+                previous |= set(pd.read_csv(old, encoding="utf-8-sig")["url"])
+        sample = build_review_sample(NEWS_CSV, ANALYSIS_START, ANALYSIS_END, REVIEW_TARGETS,
+                                     seed=2026,  # v1 검수(seed 42)와 다른 시드
+                                     within=REVIEW_WITHIN, exclude_urls=previous)
         sample.to_csv(review_path, index=False, encoding="utf-8-sig")
         print(f"검수 표본 {len(sample)}건 → {review_path}")
     else:

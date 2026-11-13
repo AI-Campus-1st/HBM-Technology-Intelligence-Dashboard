@@ -23,8 +23,9 @@ def tags_of(rows):
     [
         (True, 0, "핵심"),   # 제목에 있으면 본문 횟수와 관계없이 핵심
         (True, 5, "핵심"),
-        (False, 2, "관련"),  # 경계값: 본문 2회부터 관련
+        (False, 5, "관련"),  # 경계값: regex_v2부터 본문 5회 이상이 관련 (검수 근거: outputs/reports)
         (False, 9, "관련"),
+        (False, 4, "언급"),  # 4회까지는 언급
         (False, 1, "언급"),
         (False, 0, None),    # 어디에도 없으면 태그하지 않음
     ],
@@ -41,7 +42,7 @@ def test_relevance_values_match_schema():
 
 def test_hbm_variants_are_counted():
     rows = tagging.tag_article("n1", "반도체 동향", "HBM3E 양산. HBM4 개발. 고대역폭 메모리 수요.")
-    assert tags_of(rows)["HBM"] == "관련"
+    assert tags_of(rows)["HBM"] == "언급"  # 3회는 언급
     hbm = next(r for r in rows if r["tag"] == "HBM")
     assert hbm["body_count"] == 3 and hbm["in_title"] == 0
 
@@ -59,13 +60,25 @@ def test_policy_package_is_not_packaging():
 
 
 def test_advanced_packaging_is_tagged():
-    rows = tagging.tag_article("n1", "제목", "첨단 패키지 투자와 CoWoS 증설, 하이브리드 본딩 도입")
-    assert tags_of(rows)["패키징"] == "관련"
+    rows = tagging.tag_article("n1", "첨단 패키징 투자", "CoWoS 증설, 하이브리드 본딩 도입")
+    assert tags_of(rows)["패키징"] == "핵심"
+    assert next(r for r in rows if r["tag"] == "패키징")["body_count"] == 2
 
 
 def test_dram_variants():
     rows = tagging.tag_article("n1", "제목", "D램 가격 상승, DDR5 수요")
-    assert tags_of(rows)["DRAM"] == "관련"
+    assert next(r for r in rows if r["tag"] == "DRAM")["body_count"] == 2
+
+
+def test_hbm_inside_etf_name_is_ignored():
+    # 'PLUS 글로벌HBM반도체' 같은 ETF 상품명은 HBM 기사로 보지 않는다 (04 검수 오판 사례)
+    rows = tagging.tag_article("n1", "한화운용, 'PLUS 글로벌HBM반도체' 순자산 2조 돌파", "PLUS 글로벌HBM반도체 ETF")
+    assert "HBM" not in tags_of(rows)
+
+
+def test_hbm_after_other_words_still_counts():
+    rows = tagging.tag_article("n1", "삼성 HBM 공급", "")
+    assert tags_of(rows)["HBM"] == "핵심"
 
 
 # ── 기업 태그 ──
@@ -77,12 +90,12 @@ def test_samsung_affiliates_are_not_samsung_electronics():
 
 def test_samsung_short_form_with_semiconductor_context():
     rows = tagging.tag_article("n1", "제목", "삼성 HBM 인증 지연. 삼성전자 대응")
-    assert tags_of(rows)["삼성전자"] == "관련"
+    assert next(r for r in rows if r["tag"] == "삼성전자")["body_count"] == 2
 
 
 def test_hynix_variants():
     rows = tagging.tag_article("n1", "제목", "SK 하이닉스와 SK hynix")
-    assert tags_of(rows)["SK하이닉스"] == "관련"
+    assert next(r for r in rows if r["tag"] == "SK하이닉스")["body_count"] == 2
 
 
 def test_company_rows_have_company_type():
@@ -177,3 +190,23 @@ def test_reservoir_sampler_keeps_all_when_fewer_than_k():
     for i in range(3):
         sampler.add(i)
     assert sorted(sampler.items) == [0, 1, 2]
+
+
+def _write_news_csv(path, rows):
+    pd.DataFrame(rows, columns=["제목", "본문전문", "원문URL", "발행일"]).to_csv(path, index=False, encoding="utf-8-sig")
+
+
+def test_review_sample_within_condition_and_exclude(tmp_path):
+    csv = tmp_path / "news.csv"
+    _write_news_csv(csv, [
+        ("SK하이닉스 HBM 공급", "내용", "u1", "2024-01-02"),          # HBM 핵심 + SK 핵심
+        ("SK하이닉스 실적", "내용", "u2", "2024-01-03"),              # HBM 없음 → SK 표본 제외
+        ("SK하이닉스 HBM 투자", "내용", "u3", "2024-01-04"),          # 제외 목록
+        ("SK하이닉스 HBM 증설", "내용", "u4", "2022-01-04"),          # 기간 밖
+    ])
+    from datetime import date
+    sample = tv.build_review_sample(
+        csv, date(2024, 1, 1), date(2024, 12, 31), {"SK하이닉스": {"핵심": 10}},
+        within={"SK하이닉스": ("HBM", ("핵심", "관련"))}, exclude_urls={"u3"},
+    )
+    assert list(sample["url"]) == ["u1"]

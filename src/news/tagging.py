@@ -1,9 +1,14 @@
 """
 정규표현식 규칙으로 뉴스에 기술·기업 태그와 관련도 등급을 붙인다 (news_tag 테이블용).
 
-관련도 기준 (초안_v1.1 §4.3, docs/schema.md news_tag):
-    핵심: 제목에 포함 / 관련: 본문에 2회 이상 / 언급: 본문에 1회
+관련도 기준 (regex_v2):
+    핵심: 제목에 포함 / 관련: 본문에 5회 이상 / 언급: 본문에 1~4회
+    v1(관련 = 본문 2회 이상)은 표본 검수에서 '관련' 정밀도가 0.53(02 데이터)·0.20(04 데이터)으로 낮았다.
+    본문 5회 이상으로 올리면 0.92·0.83이 되어 v2 기준으로 채택했다. (outputs/reports/tag_precision_*.csv)
 규칙을 바꾸면 RULE_VERSION을 올려 어떤 규칙으로 만든 태그인지 추적한다.
+
+사용 원칙: 기업 태그는 이름만 나열된 기사가 많아 단독 정밀도가 낮다(04 '관련' 0.15~0.45).
+기업별 보도 점유·감성은 HBM 핵심·관련 기사 안에서만 집계한다.
 
 호출 관계: preprocess.py(Day 3)가 기사마다 tag_article()을 호출해 news_tag에 저장한다.
 LLM을 쓰지 않으므로 비용 없이 전체 기사에 적용할 수 있고, 결과는 표본 검수로 정밀도를 확인한다.
@@ -17,15 +22,16 @@ from typing import Optional
 
 from src.common.schema import COMPANY_TAGS, TECH_TAGS
 
-RULE_VERSION = "regex_v1"
+RULE_VERSION = "regex_v2"
 
 # 관련도 경계값: 본문 언급이 이 횟수 이상이면 '관련'
-RELATED_MIN_BODY_COUNT = 2
+RELATED_MIN_BODY_COUNT = 5
 
 # (태그 종류, 태그, 패턴). 오탐을 줄이려고 넓은 단어는 앞뒤 문맥을 붙였다.
 TAG_RULES: tuple[tuple[str, str, re.Pattern], ...] = (
     # HBM3E·HBM4 같은 세대 표기도 'HBM'으로 잡힌다.
-    ("tech", "HBM", re.compile(r"HBM|고대역폭\s*메모리")),
+    # 'PLUS 글로벌HBM반도체' 같은 ETF 상품명은 HBM 기사가 아니므로 '글로벌' 바로 뒤의 HBM은 제외한다.
+    ("tech", "HBM", re.compile(r"(?<!글로벌)HBM|고대역폭\s*메모리")),
     # '패키지' 단독은 '지원 패키지'·'세제 패키지' 같은 정책 기사에 많아서 수식어가 있을 때만 잡는다.
     ("tech", "패키징", re.compile(
         r"패키징|(?:첨단|어드밴스드|차세대)\s*패키지|CoWoS|하이브리드\s*본딩|2\.5D|3D\s*패키"
@@ -56,7 +62,7 @@ def classify_relevance(in_title: bool, body_count: int) -> Optional[str]:
         return "핵심"
     if body_count >= RELATED_MIN_BODY_COUNT:
         return "관련"
-    if body_count == 1:
+    if body_count >= 1:
         return "언급"
     return None
 

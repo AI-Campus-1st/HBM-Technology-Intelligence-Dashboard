@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 TECH_TAGS = ("HBM", "패키징", "DRAM")
 COMPANY_TAGS = ("SK하이닉스", "삼성전자")
 TAG_TYPES = ("tech", "company")
-RELEVANCE_LEVELS = ("핵심", "관련", "언급")  # 핵심: 제목 포함 / 관련: 본문 2회 이상 / 언급: 본문 1회
+RELEVANCE_LEVELS = ("핵심", "관련", "언급")  # 핵심: 제목 포함 / 관련: 본문 5회 이상 / 언급: 본문 1~4회 (regex_v2)
 SENTIMENT_LABELS = ("긍정", "중립", "부정", "해당없음")  # 해당 기업의 HBM 사업 관점
 MATCH_TYPES = ("기간", "키워드", "수동")
 
