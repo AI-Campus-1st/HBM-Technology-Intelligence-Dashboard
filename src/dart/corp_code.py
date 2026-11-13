@@ -9,7 +9,7 @@ corpCode.xml을 내려받아 대상 기업(SK하이닉스·삼성전자)의 corp
 - target_corps.json  : 대상 기업별 corp_code, corp_name, stock_code, modify_date, role
 
 담당: 한도윤 (공시 분석)
-일정: Day 1~2
+일정: Day 1
 """
 
 import argparse
