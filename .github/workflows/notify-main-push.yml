@@ -1,6 +1,8 @@
-# main 브랜치에 다른 사람이 push(또는 PR merge)하면 지정한 사람에게 GitHub 알림을 보낸다.
+# main 브랜치에 push(또는 PR merge)되면 push한 사람의 "상대 팀원"에게 GitHub 알림을 보낸다. (양방향)
+#   - han0210(김한승)이 push   → DoyoonHan(한도윤)에게 알림
+#   - DoyoonHan(한도윤)이 push → han0210(김한승)에게 알림
+#   - 그 외(봇 등)가 push       → 두 사람 모두에게 알림
 # 방식: push된 최신 커밋에 @멘션 댓글을 단다 → GitHub 알림(웹/모바일/이메일)으로 전달된다.
-# 본인이 push한 경우에는 아무것도 하지 않는다.
 #
 # Claude 요약: 저장소 Secrets에 아래 중 하나가 있으면 Claude가 변경 내용을 요약해 댓글에 붙인다.
 #   - ANTHROPIC_API_KEY        (Anthropic API 키, 사용량만큼 과금)
@@ -20,9 +22,12 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     env:
-      NOTIFY_USER: DoyoonHan  # 알림 받을 GitHub 아이디
+      # 알림 받을 GitHub 아이디 (공백으로 여러 명 구분). push한 사람의 상대 팀원으로 정한다.
+      NOTIFY_USERS: >-
+        ${{ github.actor == 'han0210' && 'DoyoonHan'
+          || github.actor == 'DoyoonHan' && 'han0210'
+          || 'DoyoonHan han0210' }}
       HAS_CLAUDE_AUTH: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
-    if: github.actor != 'DoyoonHan'
     steps:
       - name: Checkout (diff 비교용 전체 기록)
         if: env.HAS_CLAUDE_AUTH == 'true'
@@ -64,7 +69,8 @@ jobs:
           CLAUDE_OUTPUT: ${{ steps.claude.outputs.structured_output }}
         with:
           script: |
-            const user = process.env.NOTIFY_USER;
+            const mentions = (process.env.NOTIFY_USERS || '')
+              .split(/\s+/).filter(Boolean).map(u => `@${u}`).join(' ');
             const commits = context.payload.commits || [];
             const lines = commits.slice(0, 20).map(c =>
               `- [\`${c.id.slice(0, 7)}\`](${c.url}) ${c.message.split('\n')[0]} — ${c.author.name}`
@@ -80,7 +86,7 @@ jobs:
             }
 
             const body = [
-              `@${user} **${context.actor}** 님이 \`main\` 브랜치에 push 했습니다.`,
+              `${mentions} **${context.actor}** 님이 \`main\` 브랜치에 push 했습니다.`,
               '',
               `커밋 ${commits.length}개 · [변경사항 비교](${context.payload.compare})`,
               '',
