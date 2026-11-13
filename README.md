@@ -11,8 +11,8 @@
 
 | 역할 | 담당 영역 |
 |---|---|
-| **A — 이슈 분석** | 뉴스 적재·정제, EDA, LLM 감성 분류·이슈 추출, 이슈 분석 화면 |
-| **B — 공시 분석** | DART 공시 수집·파싱, 청킹·임베딩, RAG Q&A, 공시 Q&A 화면 |
+| **김한승 — 이슈 분석** | 뉴스 적재·정제, EDA, LLM 감성 분류·이슈 추출, 이슈 분석 화면 |
+| **한도윤 — 공시 분석** | DART 공시 수집·파싱, 청킹·임베딩, RAG Q&A, 공시 Q&A 화면 |
 | **공동** | 통합 스키마, 대시보드 통합, 스토리텔링, 리포트 |
 
 ---
@@ -40,18 +40,18 @@ copy .env.example .env
 | 순서 | 명령 | 담당 | 결과 |
 |---|---|---|---|
 | 1 | `python -m src.common.db` | 공동 | DB·테이블 생성 |
-| 2 | `python -m src.news.load_news` | A | 뉴스 DB 적재 |
-| 3 | `python -m src.dart.corp_code` | B | 대상 기업 corp_code |
-| 4 | `python -m src.dart.collect_list` | B | 공시 목록 (원본 저장) |
-| 5 | `python -m src.dart.collect_documents` | B | 공시 원문 파일 |
-| 6 | `python -m src.dart.parse_documents` | B | 공시 텍스트 DB 적재 |
-| 7 | `python -m src.news.preprocess` | A | 정제·중복 제거된 뉴스 |
+| 2 | `python -m src.news.load_news` | 김한승 | 뉴스 DB 적재 |
+| 3 | `python -m src.dart.corp_code` | 한도윤 | 대상 기업 corp_code |
+| 4 | `python -m src.dart.collect_list` | 한도윤 | 공시 목록 (원본 저장) |
+| 5 | `python -m src.dart.collect_documents` | 한도윤 | 공시 원문 파일 |
+| 6 | `python -m src.dart.parse_documents` | 한도윤 | 공시 텍스트 DB 적재 |
+| 7 | `python -m src.news.preprocess` | 김한승 | 정제·중복 제거된 뉴스 |
 | 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 |
-| 9 | `python -m src.llm.classify` | A | 감성·이슈 분석 결과 |
-| 10 | `python -m src.rag.build_index` | B | 벡터 DB |
+| 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
+| 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB |
 | 11 | `streamlit run dashboard/app.py` | 공동 | 대시보드 실행 |
 
-> 2·7·9(A)와 3~6·10(B)은 서로 독립이라 병행할 수 있습니다.
+> 2·7·9(김한승)와 3~6·10(한도윤)은 서로 독립이라 병행할 수 있습니다.
 
 ---
 
@@ -77,15 +77,15 @@ mid_project/
 │
 ├── src/                          # 🔧 수집·분석 코드 (대시보드와 분리된 계층)
 │   ├── common/   [공동]          #   설정, 스키마, DB 연결
-│   ├── news/     [A]             #   뉴스 적재·정제
-│   ├── dart/     [B]             #   DART 공시 수집·파싱
-│   ├── eda/      [A·B·공동]      #   추이 집계, 급증 시점 탐지
-│   ├── llm/      [A]             #   LLM 감성 분류·이슈 추출·검수
-│   └── rag/      [B]             #   청킹·임베딩·질의응답
+│   ├── news/     [김한승]        #   뉴스 적재·정제
+│   ├── dart/     [한도윤]        #   DART 공시 수집·파싱
+│   ├── eda/      [각자·공동]    #   추이 집계, 급증 시점 탐지
+│   ├── llm/      [김한승]        #   LLM 감성 분류·이슈 추출·검수
+│   └── rag/      [한도윤]        #   청킹·임베딩·질의응답
 │
 ├── dashboard/                    # 📊 Streamlit 대시보드 (저장된 결과만 조회)
 │   ├── app.py    [공동]          #   진입점, 상단 결론, 페이지 연결
-│   ├── pages/                    #   화면별 파일 (A: 이슈 분석, B: 공시 Q&A)
+│   ├── pages/                    #   화면별 파일 (김한승: 이슈 분석, 한도윤: 공시 Q&A)
 │   ├── components/               #   필터·차트·Q&A UI 조각
 │   └── data_access/              #   DB·벡터 DB 조회 함수
 │
@@ -96,7 +96,7 @@ mid_project/
 │   ├── vectordb/                 #   임베딩 저장소
 │   └── labels/   (커밋 O)        #   사람이 만든 표본 검수 결과
 │
-├── notebooks/                    # 🧪 탐색용 노트북 (A_issue / B_disclosure / shared)
+├── notebooks/                    # 🧪 탐색용 노트북 (김한승_issue / 한도윤_disclosure / shared)
 ├── outputs/                      # 📈 리포트·발표용 그림과 표
 └── tests/                        # ✅ 테스트
 ```
@@ -112,8 +112,8 @@ mid_project/
 | `README.md` | 프로젝트 소개, 실행 순서, 폴더 구조. 제출물 요구사항(실행 순서 기술)을 충족한다. |
 | `requirements.txt` | `pip install -r requirements.txt` 한 번으로 전체 설치. `-r`로 아래 3개 파일을 포함하기만 하며 **직접 수정하지 않는다.** |
 | `requirements/common.txt` | [공동] pandas, plotly, streamlit 등 공통 패키지. 추가 시 합의. |
-| `requirements/issue.txt` | [A] LLM 분석에 필요한 패키지. A만 수정한다. |
-| `requirements/disclosure.txt` | [B] DART 수집·LangChain·벡터 DB 패키지. B만 수정한다. |
+| `requirements/issue.txt` | [김한승] LLM 분석에 필요한 패키지. 김한승만 수정한다. |
+| `requirements/disclosure.txt` | [한도윤] DART 수집·LangChain·벡터 DB 패키지. 한도윤만 수정한다. |
 | `.env.example` | 필요한 환경변수 이름만 적은 견본. 복사해 `.env`를 만든다. |
 | `.gitignore` | `.env`, `data/` 내용물, 캐시 등을 git에서 제외해 키 노출과 대용량 충돌을 막는다. |
 | `.gitattributes` | 줄바꿈을 LF로 통일해 Windows/Mac 간 "내용은 같은데 전부 바뀐" 충돌을 막는다. |
@@ -126,9 +126,9 @@ mid_project/
 | 경로 | 목적 |
 |---|---|
 | `guidelines/` | 과제 가이드라인(`중간프로젝트_가이드_...md`), 일일 체크리스트 등 **참고용 문서**를 모아 둔다. 새로 받은 안내 문서도 여기에 넣는다. |
-| `schema.md` | 뉴스·공시 통합 스키마. Day 1에 확정하면 이후 A·B가 서로 기다리지 않고 병행할 수 있다. `src/common/schema.py`와 항상 같이 고친다. |
+| `schema.md` | 뉴스·공시 통합 스키마. Day 1에 확정하면 이후 두 사람이 서로 기다리지 않고 병행할 수 있다. `src/common/schema.py`와 항상 같이 고친다. |
 | `conventions.md` | 브랜치·커밋 규칙, 파일 소유권, 충돌 방지 방법 정리. |
-| `daily_log/` | `YYYY-MM-DD_A.md`처럼 날짜·사람별 일지. 판단 근거를 남겨 리포트·회고에 쓴다. `_TEMPLATE.md`를 복사해 사용. |
+| `daily_log/` | `YYYY-MM-DD_김한승.md`처럼 날짜·사람별 일지. 판단 근거를 남겨 리포트·회고에 쓴다. `_TEMPLATE.md`를 복사해 사용. |
 | `report/01~07_*.md` | 리포트 7개 장(분석 목적·데이터·EDA·AI 이슈 분석·공시 Q&A·대시보드·회고)을 파일로 나눠 동시에 써도 충돌이 적다. |
 | `presentation/` | 발표 PPT(포트폴리오용)와 대시보드 스크린샷. |
 
@@ -140,14 +140,14 @@ mid_project/
 | `schema.py` | 테이블·컬럼 정의 (`docs/schema.md`와 동일하게 유지). |
 | `db.py` | DB 연결, 테이블 생성, 공통 읽기/쓰기 함수. |
 
-### `src/news/` — 뉴스 [A]
+### `src/news/` — 뉴스 [김한승]
 
 | 파일 | 일정 | 목적 |
 |---|---|---|
 | `load_news.py` | Day 2 | 제공 뉴스(`data/raw/news`)를 스키마에 맞춰 DB에 적재. |
 | `preprocess.py` | Day 3 | 정규표현식 정제, 중복 기사 제거, 키워드별 무관 기사 필터링. |
 
-### `src/dart/` — DART 공시 [B]
+### `src/dart/` — DART 공시 [한도윤]
 
 | 파일 | 일정 | 목적 |
 |---|---|---|
@@ -160,11 +160,11 @@ mid_project/
 
 | 파일 | 담당 | 목적 |
 |---|---|---|
-| `news_trend.py` | A | 키워드·기업·일자별 기사량, 무관 기사 비중. |
-| `disclosure_trend.py` | B | 기업·공시유형·일자별 공시 건수. |
+| `news_trend.py` | 김한승 | 키워드·기업·일자별 기사량, 무관 기사 비중. |
+| `disclosure_trend.py` | 한도윤 | 기업·공시유형·일자별 공시 건수. |
 | `spike_detection.py` | 공동 | 이슈 급증 시점 탐지 및 저장. |
 
-### `src/llm/` — LLM 이슈 분석 [A]
+### `src/llm/` — LLM 이슈 분석 [김한승]
 
 | 파일 | 일정 | 목적 |
 |---|---|---|
@@ -172,7 +172,7 @@ mid_project/
 | `classify.py` | Day 4 | 배치로 분류해 결과를 DB에 **미리 저장** (대시보드 실시간 호출 금지). |
 | `validate_sample.py` | Day 4 | 표본 추출 → 사람 검수 CSV(`data/labels/`) → 정확도 계산. |
 
-### `src/rag/` — 공시 Q&A [B]
+### `src/rag/` — 공시 Q&A [한도윤]
 
 | 파일 | 일정 | 목적 |
 |---|---|---|
@@ -185,14 +185,14 @@ mid_project/
 | 파일 | 담당 | 목적 |
 |---|---|---|
 | `app.py` | 공동 | 진입점. 상단 결론과 페이지 연결만 두고 로직은 넣지 않아 충돌을 줄인다. |
-| `pages/1_이슈_분석.py` | A | 이슈 트렌드·감성 추이 화면. |
-| `pages/2_공시_QA.py` | B | 공시 Q&A 화면. |
+| `pages/1_이슈_분석.py` | 김한승 | 이슈 트렌드·감성 추이 화면. |
+| `pages/2_공시_QA.py` | 한도윤 | 공시 Q&A 화면. |
 | `components/filters.py` | 공동 | 기간·기업·카테고리 공통 필터. 모든 차트가 이 값을 받는다. |
 | `components/conclusion.py` | 공동 | 상단 의사결정 결론 문구. |
-| `components/issue_charts.py` | A | Plotly 이슈·감성 차트 함수. |
-| `components/qa_view.py` | B | 질문 입력, 답변, 근거 공시 표시 UI. |
-| `data_access/issue_loader.py` | A | 뉴스·분석 결과 조회 (`st.cache_data`). |
-| `data_access/disclosure_loader.py` | B | 공시 데이터·벡터 DB 로드. |
+| `components/issue_charts.py` | 김한승 | Plotly 이슈·감성 차트 함수. |
+| `components/qa_view.py` | 한도윤 | 질문 입력, 답변, 근거 공시 표시 UI. |
+| `data_access/issue_loader.py` | 김한승 | 뉴스·분석 결과 조회 (`st.cache_data`). |
+| `data_access/disclosure_loader.py` | 한도윤 | 공시 데이터·벡터 DB 로드. |
 
 ### `data/` — 데이터 (git 제외)
 
@@ -211,17 +211,17 @@ mid_project/
 
 | 경로 | 목적 |
 |---|---|
-| `notebooks/A_issue`, `B_disclosure`, `shared` | 탐색용 노트북. 사람별 폴더 분리, **출력 지우고 커밋**. 확정 로직은 `src/`로 옮긴다. |
+| `notebooks/김한승_issue`, `한도윤_disclosure`, `shared` | 탐색용 노트북. 사람별 폴더 분리, **출력 지우고 커밋**. 확정 로직은 `src/`로 옮긴다. |
 | `outputs/figures/` | 차트 이미지 (자동 생성, git 제외). |
 | `outputs/reports/` | 표본 검수 정확도표 등 리포트에 넣을 표. |
-| `tests/test_news.py`, `tests/test_dart.py` | 담당별 테스트 파일 (A / B). |
+| `tests/test_news.py`, `tests/test_dart.py` | 담당별 테스트 파일 (김한승 / 한도윤). |
 
 ---
 
 ## 협업 규칙 요약 (자세히: [docs/conventions.md](docs/conventions.md))
 
 1. **파일 맨 위 `담당:` 표시를 따른다.** 내 담당 파일만 수정하고, 공동 파일은 한 번에 한 사람만 수정한다.
-2. **`main`에 직접 push하지 않는다.** `a/작업명`, `b/작업명`, `common/작업명` 브랜치 → PR → 상대 리뷰 후 merge.
+2. **`main`에 직접 push하지 않는다.** `issue/작업명`(김한승), `disclosure/작업명`(한도윤), `common/작업명`(공동) 브랜치 → PR → 상대 리뷰 후 merge.
 3. **작업 시작 전·PR 전 `git pull origin main`.**
 4. **패키지 추가는 자기 `requirements/*.txt`에만.**
 5. **API 키는 `.env`에만.** 코드·노트북 출력·발표자료에 키가 없는지 확인.

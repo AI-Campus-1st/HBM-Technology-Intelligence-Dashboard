@@ -1,0 +1,11 @@
+# Windows/Mac 혼용 시 줄바꿈(CRLF/LF) 차이로 생기는 가짜 충돌 방지
+* text=auto eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# 바이너리
+*.png binary
+*.jpg binary
+*.pptx binary
+*.pdf binary
+*.zip binary

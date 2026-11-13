@@ -1,4 +1,4 @@
-# [B] DART 수집·RAG용 패키지
+# [한도윤] DART 수집·RAG용 패키지
 requests
 lxml
 langchain

@@ -1,6 +1,6 @@
-# YYYY-MM-DD (Day N) — 작성자: A / B
+# YYYY-MM-DD (Day N) — 작성자: 김한승 / 한도윤
 
-> 파일명: `YYYY-MM-DD_A.md` / `YYYY-MM-DD_B.md` (사람별로 따로 작성해 충돌 방지)
+> 파일명: `YYYY-MM-DD_김한승.md` / `YYYY-MM-DD_한도윤.md` (사람별로 따로 작성해 충돌 방지)
 
 ## 오늘 한 일
 -

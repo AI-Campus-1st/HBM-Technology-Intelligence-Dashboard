@@ -1,0 +1,10 @@
+# GitHub 저장소를 만든 뒤 아래 주석을 풀고 <...-github-id>를 실제 GitHub 아이디로 바꾼다. (김한승 = 이슈 분석, 한도윤 = 공시 분석)
+# 담당 파일이 PR에서 바뀌면 해당 담당자가 자동으로 리뷰어로 지정된다.
+#
+# *                                  @<김한승-github-id> @<한도윤-github-id>
+# /src/news/                         @<김한승-github-id>
+# /src/llm/                          @<김한승-github-id>
+# /dashboard/pages/1_이슈_분석.py      @<김한승-github-id>
+# /src/dart/                         @<한도윤-github-id>
+# /src/rag/                          @<한도윤-github-id>
+# /dashboard/pages/2_공시_QA.py       @<한도윤-github-id>
