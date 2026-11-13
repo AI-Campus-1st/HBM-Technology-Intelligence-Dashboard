@@ -153,8 +153,8 @@ def test_issue_evidence_requires_existing_issue(conn):
 def test_issue_evidence_assigns_id_automatically(conn):
     conn.execute(
         "INSERT INTO issues (issue_id, tech_tag, start_date, end_date, peak_date, peak_share, article_count, method) "
-        "VALUES ('HBM-2024-04-08', 'HBM', '2024-04-08', '2024-04-21', '2024-04-15', 0.08, 120, 'v1')"
+        "VALUES ('HBM-2024-12', 'HBM', '2024-12-01', '2025-01-31', '2024-12-01', 0.12, 77, 'v1')"
     )
-    conn.execute("INSERT INTO issue_evidence (issue_id, match_type) VALUES ('HBM-2024-04-08', '기간')")
+    conn.execute("INSERT INTO issue_evidence (issue_id, match_type) VALUES ('HBM-2024-12', '기간')")
     evidence_id, verified = conn.execute("SELECT evidence_id, verified FROM issue_evidence").fetchone()
     assert evidence_id == 1 and verified == 0

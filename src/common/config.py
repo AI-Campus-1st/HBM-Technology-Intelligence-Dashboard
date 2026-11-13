@@ -3,7 +3,7 @@
 API 키는 반드시 os.getenv로 읽고 코드에 직접 쓰지 않는다.
 
 분석 기간·기준일·대상 기업도 여기서 한 번만 정의하고, 뉴스·공시 코드가 모두 이 값을 가져다 쓴다.
-근거: docs/guidelines/초안_v1.1.md §4.1 (분석 기간), 대상 기업 SK하이닉스 / 비교 삼성전자
+근거: docs/guidelines/초안_v1.2.md §4.1 (분석 기간·뉴스 파일), 대상 기업 SK하이닉스 / 비교 삼성전자
 
 담당: 공동 (변경 시 PR로 합의)
 일정: Day 1
@@ -21,6 +21,8 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
 RAW_NEWS_DIR = RAW_DIR / "news"
+# 분석에 쓰는 제공 뉴스 파일. 폴더에 다른 CSV가 있어도 이 파일만 읽는다. (2026-11-13 반도체 묶음으로 교체)
+NEWS_CSV = RAW_NEWS_DIR / "04_반도체_묶음_반도체_7177건_2023-10-19~2026-10-19.csv"
 RAW_DART_DIR = RAW_DIR / "dart"
 PROCESSED_DIR = DATA_DIR / "processed"
 DB_DIR = DATA_DIR / "db"
@@ -46,10 +48,10 @@ def require_env(name: str) -> str:
 
 
 # ── 분석 기간·기준일 (뉴스·공시 공통) ──
-# 완결된 15개 분기(2023Q1 ~ 2026Q3). 2021~2022년은 기사가 희소하고 2026Q4는 16일분만 있어 제외한다.
-# 가이드 권장 3년(2023-10 ~ 2026-10)과 다르며, 사유는 리포트에 적는다. (초안_v1.1 §4.1)
-ANALYSIS_START = date(2023, 1, 1)
-ANALYSIS_END = date(2026, 9, 30)  # 이 날짜 포함
+# 제공 뉴스 파일의 수집 기간 전체(가이드 권장 최근 3년)를 쓰고, DART 공시도 같은 기간으로 수집한다.
+# 첫 달(2023-10)과 마지막 달(2026-10)은 일부 기간만 있으므로 월별 집계 해석 시 주의한다. (초안_v1.2 §4.1)
+ANALYSIS_START = date(2023, 10, 19)
+ANALYSIS_END = date(2026, 10, 19)  # 이 날짜 포함
 
 # 기준일: "언제 시점의 데이터인가". 리포트·대시보드에 '기준일'로 표시한다.
 REFERENCE_DATE = ANALYSIS_END

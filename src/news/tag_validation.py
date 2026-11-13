@@ -3,7 +3,7 @@
 
 흐름:
     1) sample: 분석 기간 기사에 규칙을 적용하고 (태그, 관련도) 층마다 표본을 무작위로 뽑아
-       검수용 CSV(data/labels/tag_review_<규칙버전>.csv)를 만든다. 매칭 주변 문맥을 함께 저장해
+       검수용 CSV(data/labels/tag_review_<규칙버전>_<뉴스파일번호>.csv)를 만든다. 매칭 주변 문맥을 함께 저장해
        본문 전체를 읽지 않고도 판정할 수 있게 한다.
     2) 사람이 label 열을 채운다. 1 = 해당 기술·기업을 실질적으로 다룬 기사, 0 = 무관·단순 나열.
     3) score: 층별 정밀도와 95% 신뢰구간(Wilson)을 계산해 outputs/reports/에 저장한다.
@@ -143,21 +143,22 @@ def build_review_sample(csv_path, start, end, targets: dict, seed: int = 42) -> 
 
 
 def main(argv: Optional[list] = None) -> None:
-    from src.common.config import ANALYSIS_END, ANALYSIS_START, LABELS_DIR, OUTPUTS_DIR, RAW_NEWS_DIR
+    from src.common.config import ANALYSIS_END, ANALYSIS_START, LABELS_DIR, NEWS_CSV, OUTPUTS_DIR
 
     parser = argparse.ArgumentParser(description="태깅 규칙 정밀도 검수")
     parser.add_argument("step", choices=["sample", "score"])
     args = parser.parse_args(argv)
 
-    review_path = LABELS_DIR / f"tag_review_{RULE_VERSION}.csv"
+    # 어떤 뉴스 파일로 만든 검수인지 파일명 앞 번호(예: 04)를 붙여 구분한다.
+    data_id = NEWS_CSV.name.split("_")[0]
+    review_path = LABELS_DIR / f"tag_review_{RULE_VERSION}_{data_id}.csv"
     if args.step == "sample":
-        csv_path = next(RAW_NEWS_DIR.glob("*.csv"))
-        sample = build_review_sample(csv_path, ANALYSIS_START, ANALYSIS_END, REVIEW_TARGETS)
+        sample = build_review_sample(NEWS_CSV, ANALYSIS_START, ANALYSIS_END, REVIEW_TARGETS)
         sample.to_csv(review_path, index=False, encoding="utf-8-sig")
         print(f"검수 표본 {len(sample)}건 → {review_path}")
     else:
         table = precision_table(pd.read_csv(review_path, encoding="utf-8-sig"))
-        out = OUTPUTS_DIR / "reports" / f"tag_precision_{RULE_VERSION}.csv"
+        out = OUTPUTS_DIR / "reports" / f"tag_precision_{RULE_VERSION}_{data_id}.csv"
         table.to_csv(out, index=False, encoding="utf-8-sig")
         print(table.to_string(index=False))
 
