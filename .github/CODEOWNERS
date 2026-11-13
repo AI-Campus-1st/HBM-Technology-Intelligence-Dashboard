@@ -1,10 +1,28 @@
-# GitHub 저장소를 만든 뒤 아래 주석을 풀고 <...-github-id>를 실제 GitHub 아이디로 바꾼다. (김한승 = 이슈 분석, 한도윤 = 공시 분석)
 # 담당 파일이 PR에서 바뀌면 해당 담당자가 자동으로 리뷰어로 지정된다.
-#
-# *                                  @<김한승-github-id> @<한도윤-github-id>
-# /src/news/                         @<김한승-github-id>
-# /src/llm/                          @<김한승-github-id>
-# /dashboard/pages/1_이슈_분석.py      @<김한승-github-id>
-# /src/dart/                         @<한도윤-github-id>
-# /src/rag/                          @<한도윤-github-id>
-# /dashboard/pages/2_공시_QA.py       @<한도윤-github-id>
+# 아래쪽 규칙이 위쪽 규칙보다 우선한다.
+# 김한승(@han0210) = 이슈 분석, 한도윤(@DoyoonHan) = 공시 분석
+
+# 공동: 기본값 (공통 코드, 문서, 설정 등)
+*                                   @han0210 @DoyoonHan
+
+# 김한승 — 이슈 분석
+/src/news/                          @han0210
+/src/llm/                           @han0210
+/src/eda/news_trend.py              @han0210
+/dashboard/pages/1_이슈_분석.py       @han0210
+/dashboard/components/issue_charts.py @han0210
+/dashboard/data_access/issue_loader.py @han0210
+/requirements/issue.txt             @han0210
+/tests/test_news.py                 @han0210
+/notebooks/김한승_issue/             @han0210
+
+# 한도윤 — 공시 분석
+/src/dart/                          @DoyoonHan
+/src/rag/                           @DoyoonHan
+/src/eda/disclosure_trend.py        @DoyoonHan
+/dashboard/pages/2_공시_QA.py        @DoyoonHan
+/dashboard/components/qa_view.py    @DoyoonHan
+/dashboard/data_access/disclosure_loader.py @DoyoonHan
+/requirements/disclosure.txt        @DoyoonHan
+/tests/test_dart.py                 @DoyoonHan
+/notebooks/한도윤_disclosure/        @DoyoonHan

@@ -118,7 +118,7 @@ mid_project/
 | `.gitignore` | `.env`, `data/` 내용물, 캐시 등을 git에서 제외해 키 노출과 대용량 충돌을 막는다. |
 | `.gitattributes` | 줄바꿈을 LF로 통일해 Windows/Mac 간 "내용은 같은데 전부 바뀐" 충돌을 막는다. |
 | `.github/pull_request_template.md` | PR 작성 시 담당 범위·키 노출·스키마 동기화를 체크하게 한다. |
-| `.github/CODEOWNERS` | 담당 폴더가 바뀌면 담당자를 자동 리뷰어로 지정. 저장소 생성 후 GitHub 아이디를 채운다. |
+| `.github/CODEOWNERS` | 담당 폴더가 바뀌면 담당자를 자동 리뷰어로 지정 (김한승 `han0210`, 한도윤 `DoyoonHan`). |
 | `.streamlit/config.toml` | 대시보드 테마·서버 설정. |
 
 ### `docs/` — 문서
