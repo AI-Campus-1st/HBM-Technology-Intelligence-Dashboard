@@ -1,0 +1,44 @@
+# main 브랜치에 다른 사람이 push(또는 PR merge)하면 지정한 사람에게 GitHub 알림을 보낸다.
+# 방식: push된 최신 커밋에 @멘션 댓글을 단다 → GitHub 알림(웹/모바일/이메일)으로 전달된다.
+# 본인이 push한 경우에는 아무것도 하지 않는다.
+name: Notify on main push
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write  # 커밋 댓글 작성에 필요
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    env:
+      NOTIFY_USER: DoyoonHan  # 알림 받을 GitHub 아이디
+    if: github.actor != 'DoyoonHan'
+    steps:
+      - name: Comment on head commit with mention
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const user = process.env.NOTIFY_USER;
+            const commits = context.payload.commits || [];
+            const lines = commits.slice(0, 20).map(c =>
+              `- [\`${c.id.slice(0, 7)}\`](${c.url}) ${c.message.split('\n')[0]} — ${c.author.name}`
+            );
+            if (commits.length > 20) lines.push(`- …외 ${commits.length - 20}개`);
+
+            const body = [
+              `@${user} **${context.actor}** 님이 \`main\` 브랜치에 push 했습니다.`,
+              '',
+              `커밋 ${commits.length}개 · [변경사항 비교](${context.payload.compare})`,
+              '',
+              ...lines,
+            ].join('\n');
+
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body,
+            });
