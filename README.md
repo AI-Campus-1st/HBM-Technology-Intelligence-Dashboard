@@ -189,7 +189,7 @@ mid_project/
 
 | 파일 | 일정 | 목적 |
 |---|---|---|
-| `corp_code.py` | Day 2 | `corpCode.xml`로 SK하이닉스·삼성전자 `corp_code` 확인. |
+| `corp_code.py` | Day 1 | `corpCode.xml`로 SK하이닉스·삼성전자 `corp_code` 확인. |
 | `collect_list.py` | Day 2 | `list.json` 공시 목록 수집. 요청 간 딜레이, 원본 저장, 재실행 시 이미 받은 건 건너뛰기. |
 | `collect_documents.py` | Day 2 | 공시서류원본파일 API로 원문 다운로드. |
 | `parse_documents.py` | Day 2 | 원문에서 텍스트를 추출해 DB에 적재. |
