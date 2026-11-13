@@ -1,6 +1,6 @@
 # AI 기반 HBM 기술 경쟁 분석 및 SK하이닉스 전략 의사결정 지원 대시보드
 
-**AI Semiconductor Technology Intelligence**
+**HBM Technology Intelligence Dashboard**
 
 > **"HBM 중심의 AI 반도체 기술 경쟁에서 SK하이닉스가 주목해야 할 기술적 기회와 위험은 무엇인가?"**
 
