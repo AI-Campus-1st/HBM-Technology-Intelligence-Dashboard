@@ -108,3 +108,72 @@ def test_rows_match_news_tag_columns():
     expected = [c.name for c in TABLES["news_tag"].columns]
     assert list(rows[0]) == expected
     assert rows[0]["rule_version"] == tagging.RULE_VERSION
+
+
+# ── 태깅 정밀도 검수 (tag_validation) ──
+
+import re
+
+import pandas as pd
+
+from src.news import tag_validation as tv
+
+
+def test_wilson_interval_bounds():
+    low, high = tv.wilson_interval(27, 30)
+    assert 0.73 < low < 0.75 and 0.96 < high < 0.98  # 27/30 = 0.9
+
+
+def test_wilson_interval_handles_extremes():
+    assert tv.wilson_interval(0, 0) == (0.0, 0.0)
+    low, high = tv.wilson_interval(30, 30)
+    assert high == pytest.approx(1.0) and low < 1.0  # 전부 맞아도 하한은 1보다 작다
+
+
+def test_precision_table_ignores_unlabeled_rows():
+    labels = pd.DataFrame({
+        "tag": ["HBM"] * 4 + ["삼성전자"] * 2,
+        "relevance": ["핵심", "핵심", "핵심", "핵심", "언급", "언급"],
+        "label": [1, 1, 0, None, 0, 1],
+    })
+    table = tv.precision_table(labels).set_index(["tag", "relevance"])
+    assert table.loc[("HBM", "핵심"), "n_labeled"] == 3
+    assert table.loc[("HBM", "핵심"), "precision"] == pytest.approx(2 / 3)
+    assert table.loc[("삼성전자", "언급"), "n_correct"] == 1
+
+
+def test_precision_table_rejects_invalid_label():
+    labels = pd.DataFrame({"tag": ["HBM"], "relevance": ["핵심"], "label": [2]})
+    with pytest.raises(ValueError):
+        tv.precision_table(labels)
+
+
+def test_extract_contexts_shows_text_around_matches():
+    text = "앞부분 " * 20 + "HBM 공급" + " 뒷부분" * 20
+    snippet = tv.extract_contexts(text, re.compile("HBM"), width=10)
+    assert "HBM 공급" in snippet and len(snippet) < 40
+
+
+def test_extract_contexts_limits_hits_and_handles_missing():
+    text = "HBM 하나. " + "x" * 200 + " HBM 둘. " + "x" * 200 + " HBM 셋."
+    assert tv.extract_contexts(text, re.compile("HBM"), width=5, max_hits=2).count("HBM") == 2
+    assert tv.extract_contexts(None, re.compile("HBM")) == ""
+
+
+def test_reservoir_sampler_is_reproducible_and_capped():
+    def run(seed):
+        sampler = tv.ReservoirSampler(k=5, seed=seed)
+        for i in range(100):
+            sampler.add(i)
+        return sampler.items
+
+    assert run(1) == run(1)
+    assert len(run(1)) == 5
+    assert run(1) != run(2)
+
+
+def test_reservoir_sampler_keeps_all_when_fewer_than_k():
+    sampler = tv.ReservoirSampler(k=5, seed=0)
+    for i in range(3):
+        sampler.add(i)
+    assert sorted(sampler.items) == [0, 1, 2]
