@@ -296,3 +296,86 @@ def test_sample_main_does_not_overwrite_labels(tmp_path):
     with pytest.raises(SystemExit):
         relevance_review.sample_main(path=path, db_path=tmp_path / "none.db")
     assert path.read_text(encoding="utf-8") == "labels"
+
+
+# ── news_link (HBM 기사 ↔ 공시 연결, 새 RAG 기준) ──
+
+from src.dart import news_link
+
+
+@pytest.mark.parametrize("ty, name, text, expected", [
+    ("A", "사업보고서 (2024.12)", "공장 증설 실적 HBM", set()),          # 긴 문서는 연결하지 않음
+    ("D", "의결권대리행사권유참고서류", "공장 투자", set()),
+    ("J", "동일인등출자계열회사와의상품ㆍ용역거래변경", "FAB 건설 신규 FAB 구축 4,004,900", {"설비투자"}),
+    ("J", "동일인등출자계열회사와의상품ㆍ용역거래", "Wafer 구매 FAB 운영지원", set()),
+    ("J", "대규모기업집단현황공시[분기별공시(대표회사용)]", "건설 FAB 설계", set()),
+    ("I", "신규시설투자등", "청주 M15X 건설", {"설비투자"}),
+    ("I", "연결재무제표기준영업(잠정)실적(공정공시)", "매출액", {"실적"}),
+    ("I", "기타경영사항(자율공시)", "스마트공장 지원사업 대외후원금 출연", set()),
+    ("I", "풍문또는보도에대한해명(미확정)", "美 신규 어드밴스드 패키징 공장 건설 관련 보도", {"설비투자"}),
+    ("I", "풍문또는보도에대한해명(미확정)", "자사주 90조 매입 공장", set()),
+    ("B", "주요사항보고서(유상증자결정)", "자금조달의 목적 - 시설자금", {"설비투자"}),
+    ("B", "주요사항보고서(유상증자결정)", "운영자금", set()),
+    ("B", "주요사항보고서(자기주식처분결정)", "임직원 보상 공장", set()),
+])
+def test_disclosure_topics(ty, name, text, expected):
+    assert news_link.disclosure_topics(ty, name, text) == expected
+
+
+def make_link_inputs():
+    articles = pd.DataFrame([
+        {"news_id": "n1", "published_at": "2024-04-20", "title": "SK하이닉스, 청주 M15X에 HBM 라인 증설",
+         "content": "HBM", "companies": ("SK하이닉스",)},
+        {"news_id": "n2", "published_at": "2024-04-20", "title": "삼성전자 HBM 엔비디아 퀄 테스트",
+         "content": None, "companies": ("삼성전자",)},
+    ])
+    base = {"corp_code": "x", "url": "u", "text_status": "확보", "rag_target": 1}
+    disclosures = pd.DataFrame([
+        {**base, "rcept_no": "i1", "corp_name": "SK하이닉스", "report_nm": "신규시설투자등", "rcept_dt": "2024-04-24",
+         "pblntf_ty": "I", "text": "청주 M15X 건설"},
+        {**base, "rcept_no": "i2", "corp_name": "SK하이닉스", "report_nm": "신규시설투자등", "rcept_dt": "2024-07-01",
+         "pblntf_ty": "I", "text": "증설"},                                       # 날짜가 멀다
+        {**base, "rcept_no": "i3", "corp_name": "삼성전자", "report_nm": "신규시설투자등", "rcept_dt": "2024-04-24",
+         "pblntf_ty": "I", "text": "평택 증설"},                                  # n2는 설비투자 주제가 아님
+        {**base, "rcept_no": "b1", "corp_name": "SK하이닉스", "report_nm": "주요사항보고서(자기주식처분결정)",
+         "rcept_dt": "2024-04-24", "pblntf_ty": "B", "text": "임직원 보상"},
+        {**base, "rcept_no": "a1", "corp_name": "삼성전자", "report_nm": "사업보고서", "rcept_dt": "2024-03-12",
+         "pblntf_ty": "A", "text": "HBM 매출"},
+        {**base, "rcept_no": "d1", "corp_name": "삼성전자", "report_nm": "의결권대리행사권유참고서류",
+         "rcept_dt": "2024-02-26", "pblntf_ty": "D", "text": "HBM3E 양산"},
+        {**base, "rcept_no": "i4", "corp_name": "SK하이닉스", "report_nm": "유형자산취득결정", "rcept_dt": "2024-04-25",
+         "pblntf_ty": "I", "text": None, "text_status": "대상아님", "rag_target": 0},  # 연결되지만 원문 없음
+    ])
+    return articles, disclosures
+
+
+def test_link_requires_company_window_and_topic():
+    articles, disclosures = make_link_inputs()
+    links = news_link.link(articles, disclosures, window_days=30)
+    assert set(zip(links["news_id"], links["rcept_no"])) == {("n1", "i1"), ("n1", "i4")}
+    assert (links[links["rcept_no"] == "i1"]["days_from_article"] == 4).all()
+
+
+def test_new_rag_target_keeps_a_hbm_and_linked_only():
+    articles, disclosures = make_link_inputs()
+    res = news_link.new_rag_target(disclosures, news_link.link(articles, disclosures)).set_index("rcept_no")
+    assert res["new_rag_target"].to_dict() == {"i1": 1, "i2": 0, "i3": 0, "b1": 0, "a1": 1, "d1": 1, "i4": 0}
+    assert res.loc["i4", "needs_text"] == 1                    # 연결됐지만 원문이 없어 RAG 불가
+    assert res.loc["b1", "new_reason"].startswith(news_link.LINK_VERSION)
+    assert res.loc["i4", "new_reason"] is None                 # 대상아님 공시의 기록은 건드리지 않는다
+
+
+def test_hbm_articles_falls_back_to_tagging_when_news_tag_empty(tmp_path):
+    conn = db.connect(db.init_db(tmp_path / "t.db"))
+    db.write_table(conn, "news", [
+        {"news_id": "n1", "published_at": "2024-04-20", "title": "SK하이닉스 HBM 증설", "content": "본문",
+         "url": "u1", "is_duplicate": 0},
+        {"news_id": "n2", "published_at": "2024-04-20", "title": "반도체 수출 통제", "content": "HBM 한 번",
+         "url": "u2", "is_duplicate": 0},                      # HBM 언급 등급 → 제외
+        {"news_id": "n3", "published_at": "2024-04-20", "title": "SK하이닉스 HBM 증설", "content": "본문",
+         "url": "u3", "is_duplicate": 1},                      # 중복 기사 → 제외
+    ])
+    art, source = news_link.hbm_articles(conn)
+    conn.close()
+    assert art["news_id"].tolist() == ["n1"] and art.loc[0, "companies"] == ("SK하이닉스",)
+    assert "즉석 계산" in source
