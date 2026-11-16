@@ -134,3 +134,106 @@ def test_merge_keeps_text_results(tmp_path):
     row = db.read_table(conn, "disclosure", where="rcept_no = 'r1'").iloc[0]
     assert (row["text"], row["text_status"], row["rag_target"]) == ("본문", "확보", 1)
     conn.close()
+
+
+# ── collect_documents · parse_documents ──
+
+from src.dart import collect_documents, parse_documents
+
+DART_XML = """<?xml version="1.0" encoding="utf-8"?>
+<DOCUMENT><DOCUMENT-NAME>동일인등출자계열회사와의상품ㆍ용역거래변경</DOCUMENT-NAME>
+<BODY><P>거래상대방 에스케이에코플랜트(주)</P>
+<TABLE><TR><TD>FAB 건설</TD><TD>신규 FAB 구축</TD><TD>4,004,900</TD></TR></TABLE>
+<P>&amp; 기타 사항은 이사회 의결에 따른다. 거래기간 2026년 4분기.</P></BODY></DOCUMENT>"""
+
+HTML_DOC = """<html><head><style>.x { font-size: 10px; }</style></head>
+<body><table><tr><td>특수관계인과의 보험거래</td><td>퇴직연금</td></tr></table>
+<p>거래상대방 삼성생명보험 주식회사, 거래금액 15,000억원, 계약체결 방식은 수의계약이다.</p></body></html>"""
+
+
+def write_zip(doc_dir, rcept_no, content, encoding="utf-8"):
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(doc_dir / f"{rcept_no}.zip", "w") as zf:
+        zf.writestr(f"{rcept_no}.xml", content.encode(encoding))
+        zf.writestr(f"{rcept_no}_00760.xml", "<P>첨부 감사보고서 FAB</P>")
+
+
+@pytest.mark.parametrize("ty, name, expected", [
+    ("A", "사업보고서 (2023.12)", True),
+    ("J", "특수관계인과의내부거래", True),
+    ("I", "신규시설투자등", True),
+    ("I", "기타경영사항(자율공시)", True),
+    ("I", "기타경영사항(자율공시) ((배당기준일 변경 안내))", False),
+    ("I", "현금ㆍ현물배당결정", False),
+    ("I", "최대주주등소유주식변동신고서", False),
+])
+def test_is_text_target(ty, name, expected):
+    assert collect_documents.is_text_target(ty, name) is expected
+
+
+def test_download_skips_existing_and_records_failures(tmp_path):
+    (tmp_path / "r1.zip").write_bytes(b"PK old")
+    calls = []
+
+    def fetch(r):
+        calls.append(r)
+        if r == "r3":
+            raise RuntimeError("zip이 아닌 응답: 014 파일이 존재하지 않습니다")
+        return b"PK new"
+
+    failures, n = collect_documents.download(["r1", "r2", "r3"], doc_dir=tmp_path, fetch=fetch, delay=0)
+    assert calls == ["r2", "r3"] and n == 2
+    assert list(failures) == ["r3"] and not (tmp_path / "r3.zip").exists()
+
+
+def test_markup_to_text_handles_xml_and_html():
+    xml_text = parse_documents.markup_to_text(DART_XML)
+    assert "FAB 건설 | 신규 FAB 구축 | 4,004,900" in xml_text
+    assert "& 기타 사항" in xml_text and "<" not in xml_text
+    html_text = parse_documents.markup_to_text(HTML_DOC)
+    assert "font-size" not in html_text and "퇴직연금" in html_text
+
+
+def test_parse_one_reads_main_document_and_filters_j(tmp_path):
+    write_zip(tmp_path, "j1", DART_XML)
+    write_zip(tmp_path, "j2", HTML_DOC, encoding="cp949")  # EUC-KR 원문
+    r1 = parse_documents.parse_one("j1", "J", tmp_path)
+    r2 = parse_documents.parse_one("j2", "J", tmp_path)
+    assert (r1["text_status"], r1["rag_target"], r1["filter_reason"]) == ("확보", 1, None)
+    assert (r2["text_status"], r2["rag_target"], r2["filter_reason"]) == ("확보", 0, "J_본문키워드없음")
+    assert "첨부" not in r1["text"]  # 첨부 문서는 읽지 않는다
+    # 같은 본문이라도 J가 아니면 RAG 대상
+    assert parse_documents.parse_one("j2", "A", tmp_path)["rag_target"] == 1
+    # 키워드가 있어도 계열사 현황·부동산임대 공시는 공시명으로 뺀다
+    r3 = parse_documents.parse_one("j1", "J", tmp_path, "대규모기업집단현황공시[분기별공시(개별회사용)]")
+    assert (r3["rag_target"], r3["filter_reason"]) == (0, "J_공시명")
+
+
+def test_parse_one_marks_failures(tmp_path):
+    (tmp_path / "bad.zip").write_bytes(b"PK not a zip")
+    assert parse_documents.parse_one("bad", "A", tmp_path)["text_status"] == "실패"
+    write_zip(tmp_path, "short", "<P>짧음</P>")
+    assert parse_documents.parse_one("short", "A", tmp_path)["filter_reason"] == "본문없음"
+
+
+def test_parse_main_updates_db_and_is_repeatable(tmp_path, monkeypatch):
+    monkeypatch.setattr(parse_documents, "SUMMARY_PATH", tmp_path / "summary.csv")
+    doc_dir = tmp_path / "docs"
+    write_zip(doc_dir, "a1", DART_XML)
+    conn = db.connect(db.init_db(tmp_path / "t.db"))
+    rows = [
+        {"rcept_no": "a1", "pblntf_ty": "A", "report_nm": "사업보고서", "text_status": "대기"},
+        {"rcept_no": "i1", "pblntf_ty": "I", "report_nm": "현금ㆍ현물배당결정", "text_status": "대상아님"},
+        {"rcept_no": "b1", "pblntf_ty": "B", "report_nm": "주요사항보고서", "text_status": "대기"},  # zip 없음
+    ]
+    db.write_table(conn, "disclosure", [
+        {**r, "corp_code": "00164779", "corp_name": "SK하이닉스", "rcept_dt": "2024-01-01", "url": "u"} for r in rows])
+    conn.close()
+    for _ in range(2):
+        summary = parse_documents.main(db_path=tmp_path / "t.db", doc_dir=doc_dir)
+    conn = db.connect(tmp_path / "t.db")
+    status = dict(conn.execute("SELECT rcept_no, text_status FROM disclosure").fetchall())
+    conn.close()
+    assert status == {"a1": "확보", "i1": "대상아님", "b1": "대기"}
+    total = summary[summary["pblntf_ty"] == "합계"].iloc[0]
+    assert (total["확보"], total["대상아님"], total["대기"]) == (1, 1, 1)
