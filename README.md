@@ -84,6 +84,7 @@ copy .env.example .env
 | 5 | `python -m src.dart.collect_documents` | 한도윤 | 공시 원문 파일 |
 | 6 | `python -m src.dart.parse_documents` | 한도윤 | 공시 텍스트 DB 적재 |
 | 7 | `python -m src.news.preprocess` | 김한승 | 정제·중복 제거된 뉴스 |
+| 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
 | 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 |
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
 | 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB |
@@ -206,7 +207,7 @@ mid_project/
 | 파일 | 담당 | 목적 |
 |---|---|---|
 | `news_trend.py` | 김한승 | 키워드·기업·일자별 기사량, 무관 기사 비중. |
-| `disclosure_trend.py` | 한도윤 | 기업·공시유형·일자별 공시 건수. |
+| `disclosure_trend.py` | 한도윤 | 기업 × 유형 × 월 공시 건수, 공시 성격(투자·실적·풍문 등) 분류, 사건성 공시 타임라인. 필터 인자를 받아 대시보드에서 재사용. |
 | `spike_detection.py` | 공동 | 이슈 급증 시점 탐지 및 저장. |
 
 ### `src/llm/` — LLM 이슈 분석 [김한승]
