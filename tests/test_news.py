@@ -93,6 +93,38 @@ def test_samsung_short_form_with_semiconductor_context():
     assert next(r for r in rows if r["tag"] == "삼성전자")["body_count"] == 2
 
 
+@pytest.mark.parametrize(
+    "title",
+    [
+        "삼성·SK, SEDEX서 차세대 HBM 격돌",     # 04 검수에서 놓친 제목 형태 (regex_v3)
+        "삼성 “올해 HBM 공급 2배 확대”",
+        "삼성도 뛰어든 ‘무한확장 메모리’",
+        "삼전닉스 질주에 HBM ETF도 날았다",
+    ],
+)
+def test_samsung_short_forms_in_title(title):
+    assert tags_of(tagging.tag_article("n1", title, ""))["삼성전자"] == "핵심"
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["삼성SDI 배터리", "삼성바이오로직스 실적", "삼성물산 건설", "삼성생명 보험", "삼성디스플레이 OLED",
+     "삼성전기 MLCC", "삼성SDS 클라우드", "삼성중공업 수주", "삼성증권 리포트", "삼성액티브자산운용 ETF",
+     "삼성동 코엑스", "삼성그룹 인사"],
+)
+def test_samsung_affiliates_and_places_excluded(text):
+    assert "삼성전자" not in tags_of(tagging.tag_article("n1", text, ""))
+
+
+@pytest.mark.parametrize("title", ["삼성·SK, HBM 경쟁", "SK하닉 영업익 급증", "삼전닉스 질주"])
+def test_hynix_short_forms_in_title(title):
+    assert tags_of(tagging.tag_article("n1", title, ""))["SK하이닉스"] == "핵심"
+
+
+def test_sk_group_alone_is_not_hynix():
+    assert "SK하이닉스" not in tags_of(tagging.tag_article("n1", "SK텔레콤·SK이노베이션 실적", "SK그룹 회장"))
+
+
 def test_hynix_variants():
     rows = tagging.tag_article("n1", "제목", "SK 하이닉스와 SK hynix")
     assert next(r for r in rows if r["tag"] == "SK하이닉스")["body_count"] == 2
