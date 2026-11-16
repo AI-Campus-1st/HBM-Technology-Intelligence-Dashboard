@@ -52,8 +52,8 @@ STRATA = {
 # 판정 근거가 될 만한 단어 주변을 발췌한다 (관련·무관 신호를 모두 포함해 검수자가 판단하게 한다).
 # '투자'는 모든 거래소 공시의 상투 문구 "기타 투자판단과 관련한 중요사항"에 걸려 '투자판단'은 뺀다.
 CONTEXT_PATTERN = re.compile(
-    r"HBM|고대역폭|메모리|D램|DRAM|FAB|팹|공장|설비|증설|투자(?!판단)|패키징|AI|"
-    r"자기주식|배당|보상|임직원|보험|퇴직연금"
+    r"HBM|고대역폭|메모리|D램|DRAM|FAB|팹|공장|설비|증설|건설|생산|투자(?!판단)|패키징|AI|"
+    r"자기주식|배당|보상|임직원|보험|퇴직연금|거래상대방"
 )
 HEAD_CHARS = 300
 LABELS = (0, 1, 2)
@@ -119,7 +119,8 @@ def relevance_table(labels: pd.DataFrame) -> pd.DataFrame:
 def unrelated_names(labels: pd.DataFrame, top: int = 10) -> pd.DataFrame:
     """RAG 대상인데 무관(0)으로 판정된 공시명 상위 목록 — 범위 조정 후보."""
     bad = labels[(labels["stratum"] == "RAG대상") & (labels["label"] == 0)].copy()
-    bad["name"] = bad["report_nm"].str.replace(r"^\[.*?\]", "", regex=True).str.replace(r"\s*\(.*$", "", regex=True)
+    # [기재정정] 같은 앞머리와 정기보고서의 기간 표기 '(2024.03)'만 지운다. B의 '(자기주식처분결정)'처럼 종류를 나타내는 괄호는 남긴다.
+    bad["name"] = bad["report_nm"].str.replace(r"^\[.*?\]", "", regex=True).str.replace(r"\s*\(\d{4}\.\d{2}\)$", "", regex=True)
     return bad.groupby(["pblntf_ty", "name"]).size().rename("count").reset_index().sort_values(
         "count", ascending=False).head(top)
 
