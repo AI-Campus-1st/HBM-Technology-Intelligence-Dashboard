@@ -7,6 +7,8 @@
 
 ## 테이블 관계
 
+ERD 그림: [`docs/resources/erd_v1.3.png`](resources/erd_v1.3.png) (SVG: `erd_v1.3.svg`)
+
 ```
 news ─┬─< news_tag        (규칙 기반 기술·기업 태그, 기사당 여러 행)
       ├─< news_analysis   (LLM 결과, 프롬프트 버전별 1행)

@@ -1,0 +1,177 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1740" height="960" viewBox="0 0 1740 960" font-family="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif">
+  <style>
+    .bg { fill: #f7f8fa; }
+    .title { font-size: 24px; font-weight: 700; fill: #1f2328; }
+    .sub { font-size: 13px; fill: #59636e; }
+    .box { fill: #ffffff; }
+    .outline { fill: none; stroke: #c8ced6; stroke-width: 1.2; }
+    .h-kim { fill: #2f6fb3; }
+    .h-han { fill: #2e8b57; }
+    .h-common { fill: #7a4fb5; }
+    .stripe { fill: #f2f4f7; }
+    .tname { font-size: 17px; font-weight: 700; fill: #ffffff; font-family: Consolas, 'Malgun Gothic', monospace; }
+    .owner { font-size: 12px; fill: #ffffff; opacity: 0.9; }
+    .pk { font-size: 11px; font-weight: 700; fill: #b7791f; }
+    .fk { font-size: 11px; font-weight: 700; fill: #2f6fb3; }
+    .col { font-size: 13.5px; fill: #1f2328; font-family: Consolas, 'Malgun Gothic', monospace; }
+    .colk { font-size: 13.5px; fill: #1f2328; font-weight: 700; font-family: Consolas, 'Malgun Gothic', monospace; }
+    .type { font-size: 12px; fill: #8250df; font-family: Consolas, monospace; }
+    .cons { font-size: 11.5px; fill: #59636e; }
+    .rel { fill: none; stroke: #57606a; stroke-width: 1.6; }
+    .mk { fill: none; stroke: #57606a; stroke-width: 1.6; }
+    .mkc { fill: #f7f8fa; stroke: #57606a; stroke-width: 1.6; }
+    .lg { font-size: 12.5px; fill: #1f2328; }
+    .note { font-size: 12px; fill: #59636e; }
+  </style>
+  <defs>
+    <!-- 0..N (circle + crow's foot) -->
+    <marker id="many0" viewBox="-26 -10 28 20" refX="0" refY="0" markerWidth="28" markerHeight="20" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+      <path class="mk" d="M-13,0 L0,-8 M-13,0 L0,0 M-13,0 L0,8"/>
+      <circle class="mkc" cx="-19" cy="0" r="4"/>
+    </marker>
+    <!-- exactly one (double bar) -->
+    <marker id="one" viewBox="-16 -10 18 20" refX="0" refY="0" markerWidth="18" markerHeight="20" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+      <path class="mk" d="M-6,-8 L-6,8 M-12,-8 L-12,8"/>
+    </marker>
+    <!-- 0..1 (circle + bar) -->
+    <marker id="zeroOne" viewBox="-22 -10 24 20" refX="0" refY="0" markerWidth="24" markerHeight="20" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+      <path class="mk" d="M-6,-8 L-6,8"/>
+      <circle class="mkc" cx="-15" cy="0" r="4"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1740" height="960"/>
+  <text class="title" x="40" y="38">HBM Technology Intelligence — DB 스키마 ERD</text>
+  <text class="sub" x="40" y="58">v1.3 · SQLite data/db/hbm.db · 기준: src/common/schema.py, docs/schema.md</text>
+
+  <!-- ── 관계선 ── -->
+  <!-- news 1 ── 0..N news_tag -->
+  <path class="rel" d="M540,157 L620,157" marker-start="url(#one)" marker-end="url(#many0)"/>
+  <!-- news 1 ── 0..N news_analysis -->
+  <path class="rel" d="M290,100 L290,76 L1450,76 L1450,100" marker-start="url(#one)" marker-end="url(#many0)"/>
+  <!-- issue_evidence 0..N ── 0..1 news -->
+  <path class="rel" d="M720,500 L720,456 L290,456 L290,412" marker-start="url(#many0)" marker-end="url(#zeroOne)"/>
+  <!-- issues 1 ── 0..N issue_evidence -->
+  <path class="rel" d="M540,557 L580,557 L580,583 L620,583" marker-start="url(#one)" marker-end="url(#many0)"/>
+  <!-- issue_evidence 0..N ── 0..1 disclosure -->
+  <path class="rel" d="M1120,635 L1160,635 L1160,557 L1200,557" marker-start="url(#many0)" marker-end="url(#zeroOne)"/>
+
+  <!-- ── news ── -->
+  <g transform="translate(40,100)">
+    <rect class="box" width="500" height="312" rx="8"/>
+    <rect class="h-kim" width="500" height="44" rx="8"/><rect class="h-kim" y="30" width="500" height="14"/>
+    <text class="tname" x="16" y="28">news</text><text class="owner" x="484" y="28" text-anchor="end">담당 김한승 · 뉴스 원본</text>
+    <rect class="stripe" y="70" width="500" height="26"/><rect class="stripe" y="122" width="500" height="26"/><rect class="stripe" y="174" width="500" height="26"/><rect class="stripe" y="226" width="500" height="26"/><rect class="stripe" y="278" width="500" height="26"/>
+    <text class="pk" x="14" y="61">PK</text><text class="colk" x="52" y="61">news_id</text><text class="type" x="210" y="61">TEXT</text><text class="cons" x="280" y="61">URL SHA-1 앞 16자리</text>
+    <text class="col" x="52" y="87">published_at</text><text class="type" x="210" y="87">DATE</text><text class="cons" x="280" y="87">NN</text>
+    <text class="col" x="52" y="113">title</text><text class="type" x="210" y="113">TEXT</text><text class="cons" x="280" y="113">NN</text>
+    <text class="col" x="52" y="139">content</text><text class="type" x="210" y="139">TEXT</text>
+    <text class="col" x="52" y="165">keyword</text><text class="type" x="210" y="165">TEXT</text><text class="cons" x="280" y="165">'; ' 구분</text>
+    <text class="col" x="52" y="191">media</text><text class="type" x="210" y="191">TEXT</text>
+    <text class="col" x="52" y="217">category</text><text class="type" x="210" y="217">TEXT</text><text class="cons" x="280" y="217">'; ' 구분</text>
+    <text class="col" x="52" y="243">url</text><text class="type" x="210" y="243">TEXT</text><text class="cons" x="280" y="243">NN</text>
+    <text class="col" x="52" y="269">is_duplicate</text><text class="type" x="210" y="269">INTEGER</text><text class="cons" x="280" y="269">NN · 0/1 · 기본 0</text>
+    <text class="col" x="52" y="295">dup_group_id</text><text class="type" x="210" y="295">TEXT</text><text class="cons" x="280" y="295">대표 news_id (논리 참조)</text>
+    <rect class="outline" width="500" height="312" rx="8"/>
+  </g>
+
+  <!-- ── news_tag ── -->
+  <g transform="translate(620,100)">
+    <rect class="box" width="500" height="234" rx="8"/>
+    <rect class="h-kim" width="500" height="44" rx="8"/><rect class="h-kim" y="30" width="500" height="14"/>
+    <text class="tname" x="16" y="28">news_tag</text><text class="owner" x="484" y="28" text-anchor="end">담당 김한승 · 규칙 기반 태그</text>
+    <rect class="stripe" y="70" width="500" height="26"/><rect class="stripe" y="122" width="500" height="26"/><rect class="stripe" y="174" width="500" height="26"/>
+    <text class="pk" x="8" y="61">PK</text><text class="fk" x="28" y="61">FK</text><text class="colk" x="52" y="61">news_id</text><text class="type" x="210" y="61">TEXT</text><text class="cons" x="280" y="61">→ news</text>
+    <text class="pk" x="14" y="87">PK</text><text class="colk" x="52" y="87">tag_type</text><text class="type" x="210" y="87">TEXT</text><text class="cons" x="280" y="87">tech / company</text>
+    <text class="pk" x="14" y="113">PK</text><text class="colk" x="52" y="113">tag</text><text class="type" x="210" y="113">TEXT</text><text class="cons" x="280" y="113">HBM·패키징·DRAM·SK하이닉스·삼성전자</text>
+    <text class="col" x="52" y="139">relevance</text><text class="type" x="210" y="139">TEXT</text><text class="cons" x="280" y="139">NN · 핵심 / 관련 / 언급</text>
+    <text class="col" x="52" y="165">in_title</text><text class="type" x="210" y="165">INTEGER</text><text class="cons" x="280" y="165">NN · 0/1</text>
+    <text class="col" x="52" y="191">body_count</text><text class="type" x="210" y="191">INTEGER</text><text class="cons" x="280" y="191">NN</text>
+    <text class="col" x="52" y="217">rule_version</text><text class="type" x="210" y="217">TEXT</text><text class="cons" x="280" y="217">NN</text>
+    <rect class="outline" width="500" height="234" rx="8"/>
+  </g>
+
+  <!-- ── news_analysis ── -->
+  <g transform="translate(1200,100)">
+    <rect class="box" width="500" height="208" rx="8"/>
+    <rect class="h-kim" width="500" height="44" rx="8"/><rect class="h-kim" y="30" width="500" height="14"/>
+    <text class="tname" x="16" y="28">news_analysis</text><text class="owner" x="484" y="28" text-anchor="end">담당 김한승 · LLM 결과</text>
+    <rect class="stripe" y="70" width="500" height="26"/><rect class="stripe" y="122" width="500" height="26"/><rect class="stripe" y="174" width="500" height="26"/>
+    <text class="pk" x="8" y="61">PK</text><text class="fk" x="28" y="61">FK</text><text class="colk" x="52" y="61">news_id</text><text class="type" x="210" y="61">TEXT</text><text class="cons" x="280" y="61">→ news</text>
+    <text class="pk" x="14" y="87">PK</text><text class="colk" x="52" y="87">prompt_version</text><text class="type" x="210" y="87">TEXT</text><text class="cons" x="280" y="87">버전별 결과 보관</text>
+    <text class="col" x="52" y="113">sentiment_skh</text><text class="type" x="210" y="113">TEXT</text><text class="cons" x="280" y="113">NN · 긍정/중립/부정/해당없음</text>
+    <text class="col" x="52" y="139">sentiment_sec</text><text class="type" x="210" y="139">TEXT</text><text class="cons" x="280" y="139">NN · 긍정/중립/부정/해당없음</text>
+    <text class="col" x="52" y="165">issue_keywords</text><text class="type" x="210" y="165">TEXT</text><text class="cons" x="280" y="165">JSON 배열 문자열</text>
+    <text class="col" x="52" y="191">model</text><text class="type" x="210" y="191">TEXT</text><text class="cons" x="280" y="191">NN</text>
+    <rect class="outline" width="500" height="208" rx="8"/>
+  </g>
+
+  <!-- ── issues ── -->
+  <g transform="translate(40,500)">
+    <rect class="box" width="500" height="312" rx="8"/>
+    <rect class="h-kim" width="500" height="44" rx="8"/><rect class="h-kim" y="30" width="500" height="14"/>
+    <text class="tname" x="16" y="28">issues</text><text class="owner" x="484" y="28" text-anchor="end">담당 김한승 · 월 단위 급증 구간</text>
+    <rect class="stripe" y="70" width="500" height="26"/><rect class="stripe" y="122" width="500" height="26"/><rect class="stripe" y="174" width="500" height="26"/><rect class="stripe" y="226" width="500" height="26"/><rect class="stripe" y="278" width="500" height="26"/>
+    <text class="pk" x="14" y="61">PK</text><text class="colk" x="52" y="61">issue_id</text><text class="type" x="210" y="61">TEXT</text><text class="cons" x="280" y="61">예: HBM-2024-12</text>
+    <text class="col" x="52" y="87">tech_tag</text><text class="type" x="210" y="87">TEXT</text><text class="cons" x="280" y="87">NN · HBM / 패키징 / DRAM</text>
+    <text class="col" x="52" y="113">start_date</text><text class="type" x="210" y="113">DATE</text><text class="cons" x="280" y="113">NN</text>
+    <text class="col" x="52" y="139">end_date</text><text class="type" x="210" y="139">DATE</text><text class="cons" x="280" y="139">NN</text>
+    <text class="col" x="52" y="165">peak_date</text><text class="type" x="210" y="165">DATE</text><text class="cons" x="280" y="165">NN</text>
+    <text class="col" x="52" y="191">peak_share</text><text class="type" x="210" y="191">REAL</text><text class="cons" x="280" y="191">NN · 0~1</text>
+    <text class="col" x="52" y="217">baseline_share</text><text class="type" x="210" y="217">REAL</text><text class="cons" x="280" y="217">0~1</text>
+    <text class="col" x="52" y="243">article_count</text><text class="type" x="210" y="243">INTEGER</text><text class="cons" x="280" y="243">NN</text>
+    <text class="col" x="52" y="269">method</text><text class="type" x="210" y="269">TEXT</text><text class="cons" x="280" y="269">NN · 예: rolling6m_2sigma_v1</text>
+    <text class="col" x="52" y="295">summary</text><text class="type" x="210" y="295">TEXT</text>
+    <rect class="outline" width="500" height="312" rx="8"/>
+  </g>
+
+  <!-- ── issue_evidence ── -->
+  <g transform="translate(620,500)">
+    <rect class="box" width="500" height="234" rx="8"/>
+    <rect class="h-common" width="500" height="44" rx="8"/><rect class="h-common" y="30" width="500" height="14"/>
+    <text class="tname" x="16" y="28">issue_evidence</text><text class="owner" x="484" y="28" text-anchor="end">공동 (P1) · 구간 ↔ 기사·공시 연결</text>
+    <rect class="stripe" y="70" width="500" height="26"/><rect class="stripe" y="122" width="500" height="26"/><rect class="stripe" y="174" width="500" height="26"/>
+    <text class="pk" x="14" y="61">PK</text><text class="colk" x="52" y="61">evidence_id</text><text class="type" x="210" y="61">INTEGER</text><text class="cons" x="280" y="61">자동 증가</text>
+    <text class="fk" x="14" y="87">FK</text><text class="col" x="52" y="87">issue_id</text><text class="type" x="210" y="87">TEXT</text><text class="cons" x="280" y="87">NN · → issues</text>
+    <text class="fk" x="14" y="113">FK</text><text class="col" x="52" y="113">news_id</text><text class="type" x="210" y="113">TEXT</text><text class="cons" x="280" y="113">→ news (NULL 허용)</text>
+    <text class="fk" x="14" y="139">FK</text><text class="col" x="52" y="139">rcept_no</text><text class="type" x="210" y="139">TEXT</text><text class="cons" x="280" y="139">→ disclosure (NULL 허용)</text>
+    <text class="col" x="52" y="165">match_type</text><text class="type" x="210" y="165">TEXT</text><text class="cons" x="280" y="165">NN · 기간 / 키워드 / 수동</text>
+    <text class="col" x="52" y="191">verified</text><text class="type" x="210" y="191">INTEGER</text><text class="cons" x="280" y="191">NN · 0/1 · 기본 0</text>
+    <text class="col" x="52" y="217">note</text><text class="type" x="210" y="217">TEXT</text>
+    <rect class="outline" width="500" height="234" rx="8"/>
+  </g>
+
+  <!-- ── disclosure ── -->
+  <g transform="translate(1200,500)">
+    <rect class="box" width="500" height="338" rx="8"/>
+    <rect class="h-han" width="500" height="44" rx="8"/><rect class="h-han" y="30" width="500" height="14"/>
+    <text class="tname" x="16" y="28">disclosure</text><text class="owner" x="484" y="28" text-anchor="end">담당 한도윤 · DART 공시</text>
+    <rect class="stripe" y="70" width="500" height="26"/><rect class="stripe" y="122" width="500" height="26"/><rect class="stripe" y="174" width="500" height="26"/><rect class="stripe" y="226" width="500" height="26"/><rect class="stripe" y="278" width="500" height="26"/>
+    <text class="pk" x="14" y="61">PK</text><text class="colk" x="52" y="61">rcept_no</text><text class="type" x="210" y="61">TEXT</text><text class="cons" x="280" y="61">접수번호</text>
+    <text class="col" x="52" y="87">corp_code</text><text class="type" x="210" y="87">TEXT</text><text class="cons" x="280" y="87">NN · 기업 식별 키</text>
+    <text class="col" x="52" y="113">corp_name</text><text class="type" x="210" y="113">TEXT</text><text class="cons" x="280" y="113">NN</text>
+    <text class="col" x="52" y="139">report_nm</text><text class="type" x="210" y="139">TEXT</text><text class="cons" x="280" y="139">NN</text>
+    <text class="col" x="52" y="165">rcept_dt</text><text class="type" x="210" y="165">DATE</text><text class="cons" x="280" y="165">NN</text>
+    <text class="col" x="52" y="191">pblntf_ty</text><text class="type" x="210" y="191">TEXT</text><text class="cons" x="280" y="191">NN · A / B / D / I / J</text>
+    <text class="col" x="52" y="217">url</text><text class="type" x="210" y="217">TEXT</text><text class="cons" x="280" y="217">NN</text>
+    <text class="col" x="52" y="243">text</text><text class="type" x="210" y="243">TEXT</text><text class="cons" x="280" y="243">추출 본문</text>
+    <text class="col" x="52" y="269">text_status</text><text class="type" x="210" y="269">TEXT</text><text class="cons" x="280" y="269">NN · 대기(기본)/확보/대상아님/실패</text>
+    <text class="col" x="52" y="295">rag_target</text><text class="type" x="210" y="295">INTEGER</text><text class="cons" x="280" y="295">NN · 0/1 · 기본 0</text>
+    <text class="col" x="52" y="321">filter_reason</text><text class="type" x="210" y="321">TEXT</text><text class="cons" x="280" y="321">제외·실패 사유</text>
+    <rect class="outline" width="500" height="338" rx="8"/>
+  </g>
+
+  <!-- ── 범례 ── -->
+  <g transform="translate(40,870)">
+    <rect x="0" y="-12" width="14" height="14" rx="3" class="h-kim"/><text class="lg" x="20" y="0">김한승 (이슈 분석)</text>
+    <rect x="150" y="-12" width="14" height="14" rx="3" class="h-han"/><text class="lg" x="170" y="0">한도윤 (공시 분석)</text>
+    <rect x="300" y="-12" width="14" height="14" rx="3" class="h-common"/><text class="lg" x="320" y="0">공동</text>
+    <text class="pk" x="400" y="0">PK</text><text class="lg" x="422" y="0">기본키</text>
+    <text class="fk" x="480" y="0">FK</text><text class="lg" x="502" y="0">외래키</text>
+    <text class="lg" x="560" y="0">NN = NOT NULL</text>
+    <path class="rel" d="M700,-5 L740,-5" marker-end="url(#one)"/><text class="lg" x="748" y="0">정확히 1</text>
+    <path class="rel" d="M820,-5 L860,-5" marker-end="url(#zeroOne)"/><text class="lg" x="868" y="0">0 또는 1</text>
+    <path class="rel" d="M950,-5 L990,-5" marker-end="url(#many0)"/><text class="lg" x="998" y="0">0개 이상</text>
+    <text class="note" x="0" y="30">날짜는 'YYYY-MM-DD' 문자열(TEXT) · FK는 연결마다 PRAGMA foreign_keys = ON 필요 · 공시 청크는 테이블 없이 data/vectordb/ 메타데이터로 관리</text>
+  </g>
+</svg>
