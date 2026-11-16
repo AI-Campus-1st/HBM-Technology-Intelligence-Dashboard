@@ -3,7 +3,7 @@
 > 변경 시 `src/common/schema.py`와 이 문서를 **같은 PR**에서 함께 고친다. 둘이 어긋나면 `tests/test_schema.py`가 실패한다.
 > DB는 SQLite(`data/db/hbm.db`), 테이블 생성은 `src.common.schema.create_all()`.
 
-**v1.2** — 근거: `docs/guidelines/초안_v1.2.md` §4.4 (뉴스 파일 교체에 따라 category 사용, 급증 구간을 월 단위로 변경)
+**v1.3** — 근거: `docs/guidelines/초안_v1.2.md` §4.4 (뉴스 파일 교체에 따라 category 사용, 급증 구간을 월 단위로 변경), §11 공시 범위 결정(2026-11-16, 리포트 2.3)
 
 ## 테이블 관계
 
@@ -79,18 +79,25 @@ HBM 비중 급증 구간 (월 단위). Day 3에 생성해 한도윤에게 전달
 
 ## disclosure (담당 한도윤)
 
-v1.0과 같다. 제약 조건(NOT NULL 등) 추가는 담당자가 결정한다.
+DART 공시 한 건당 한 행. `collect_list`가 목록을 넣고(`text_status='대기'`), `parse_documents`가 본문과 상태를 채운다.
+공시 범위(리포트 2.3)에 따라 목록에는 들어가도 원문을 받지 않는 공시가 있어, 원문 확보 상태와 RAG 사용 여부를 따로 기록한다.
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
 | rcept_no | TEXT | PK | 접수번호 |
-| corp_code | TEXT | | DART 고유번호 |
-| corp_name | TEXT | | 기업명 |
-| report_nm | TEXT | | 공시명 |
-| rcept_dt | DATE | | 제출일 |
-| pblntf_ty | TEXT | | 공시 유형 |
-| url | TEXT | | 원문 링크 |
-| text | TEXT | | 추출 본문 |
+| corp_code | TEXT | NOT NULL | DART 고유번호 |
+| corp_name | TEXT | NOT NULL | 기업명 |
+| report_nm | TEXT | NOT NULL | 공시명 |
+| rcept_dt | DATE | NOT NULL | 제출일 |
+| pblntf_ty | TEXT | NOT NULL, `A` / `B` / `D` / `I` / `J` | 공시 유형 코드 (정기공시 / 주요사항보고 / 지분공시 / 거래소공시 / 공정위공시) |
+| url | TEXT | NOT NULL | 원문 링크 |
+| text | TEXT | | 추출 본문 (확보 전·대상 아님·실패면 NULL) |
+| text_status | TEXT | NOT NULL, 기본 `대기`, `대기` / `확보` / `대상아님` / `실패` | 원문 확보 상태 |
+| rag_target | INTEGER | NOT NULL, 기본 0, 0/1 | RAG 사용 여부 (J는 본문 키워드가 있을 때만 1) |
+| filter_reason | TEXT | | 대상아님·실패·RAG 제외 사유 (예: `I_공시명`, `J_본문키워드없음`, `다운로드오류`) |
+
+- 원문 확보율 = `text_status='확보'` 건수 / (`확보` + `실패`) 건수. `대상아님`은 분모에서 뺀다.
+- 공시 건수 추이(EDA)는 `text_status`와 관계없이 전체 행을 `pblntf_ty`별로 센다.
 
 ## issue_evidence (공동, P1)
 
@@ -122,3 +129,4 @@ v1.0과 같다. 제약 조건(NOT NULL 등) 추가는 담당자가 결정한다.
 | v1.0 | news, disclosure, news_analysis 최초 정의 |
 | v1.1 | news: `media`·`is_duplicate`·`dup_group_id` 추가, `category` NULL 허용, `corp_name` 제거 → 기업은 `news_tag`로 / `news_tag` 신규 / news_analysis: `sentiment` → 기업별 `sentiment_skh`·`sentiment_sec`, PK에 `prompt_version` / `issues`·`issue_evidence` 신규 / disclosure 변경 없음 |
 | v1.2 | 뉴스 파일을 반도체 묶음(04)으로 교체: news.category를 수집 키워드에서 변환해 채움 / issues를 주 단위 → 월 단위로 변경(설명만 변경, 컬럼 동일) |
+| v1.3 | disclosure: `text_status`·`rag_target`·`filter_reason` 추가, `pblntf_ty` 허용 값(A·B·D·I·J) CHECK, 목록 컬럼 NOT NULL (공시 범위 결정 반영). 기존 로컬 DB는 `python -m src.common.db --rebuild` 필요 |

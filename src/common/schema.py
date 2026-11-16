@@ -20,6 +20,11 @@ TAG_TYPES = ("tech", "company")
 RELEVANCE_LEVELS = ("핵심", "관련", "언급")  # 핵심: 제목 포함 / 관련: 본문 5회 이상 / 언급: 본문 1~4회 (regex_v2)
 SENTIMENT_LABELS = ("긍정", "중립", "부정", "해당없음")  # 해당 기업의 HBM 사업 관점
 MATCH_TYPES = ("기간", "키워드", "수동")
+# 공시 범위 (2026-11-16 확정, 리포트 2.3): A 정기공시, B 주요사항보고, D 지분공시(의결권대리행사권유참고서류만),
+# I 거래소공시, J 공정위공시. C 발행공시·E 기타공시는 수집하지 않는다.
+DISCLOSURE_TYPES = ("A", "B", "D", "I", "J")
+# 원문 확보 상태: 대기(목록만 수집) → 확보 / 대상아님(범위 필터에서 제외) / 실패(다운로드·추출 오류)
+TEXT_STATUSES = ("대기", "확보", "대상아님", "실패")
 
 # 문서에 쓰는 논리 타입 → SQLite 타입. 날짜는 'YYYY-MM-DD' 문자열로 저장한다.
 SQL_TYPES = {"TEXT": "TEXT", "DATE": "TEXT", "INTEGER": "INTEGER", "REAL": "REAL"}
@@ -130,13 +135,16 @@ TABLES: dict[str, Table] = {
             owner="한도윤",
             columns=(
                 Column("rcept_no", "TEXT", "접수번호", not_null=True),
-                Column("corp_code", "TEXT", "DART 고유번호"),
-                Column("corp_name", "TEXT", "기업명"),
-                Column("report_nm", "TEXT", "공시명"),
-                Column("rcept_dt", "DATE", "제출일"),
-                Column("pblntf_ty", "TEXT", "공시 유형"),
-                Column("url", "TEXT", "원문 링크"),
-                Column("text", "TEXT", "추출 본문"),
+                Column("corp_code", "TEXT", "DART 고유번호", not_null=True),
+                Column("corp_name", "TEXT", "기업명", not_null=True),
+                Column("report_nm", "TEXT", "공시명", not_null=True),
+                Column("rcept_dt", "DATE", "제출일", not_null=True),
+                Column("pblntf_ty", "TEXT", "공시 유형 코드", not_null=True, allowed=DISCLOSURE_TYPES),
+                Column("url", "TEXT", "원문 링크", not_null=True),
+                Column("text", "TEXT", "추출 본문 (확보 전·대상 아님·실패면 NULL)"),
+                Column("text_status", "TEXT", "원문 확보 상태", not_null=True, allowed=TEXT_STATUSES, default="'대기'"),
+                Column("rag_target", "INTEGER", "RAG 사용 여부 (J는 본문 키워드가 있을 때만 1)", not_null=True, allowed=BOOL, default="0"),
+                Column("filter_reason", "TEXT", "대상아님·실패·RAG 제외 사유 (예: I_공시명, J_본문키워드없음, 다운로드오류)"),
             ),
             primary_key=("rcept_no",),
         ),
