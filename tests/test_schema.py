@@ -158,3 +158,43 @@ def test_issue_evidence_assigns_id_automatically(conn):
     conn.execute("INSERT INTO issue_evidence (issue_id, match_type) VALUES ('HBM-2024-12', '기간')")
     evidence_id, verified = conn.execute("SELECT evidence_id, verified FROM issue_evidence").fetchone()
     assert evidence_id == 1 and verified == 0
+
+
+# ── disclosure (v1.3, 공시 범위 반영) ──
+
+def insert_disclosure(conn, rcept_no="20240424000001", pblntf_ty="I", **extra):
+    row = {
+        "rcept_no": rcept_no, "corp_code": "00164779", "corp_name": "SK하이닉스",
+        "report_nm": "신규시설투자등", "rcept_dt": "2024-04-24", "pblntf_ty": pblntf_ty,
+        "url": f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={rcept_no}", **extra,
+    }
+    cols = ", ".join(row)
+    conn.execute(f"INSERT INTO disclosure ({cols}) VALUES ({', '.join('?' for _ in row)})", tuple(row.values()))
+
+
+def test_disclosure_defaults_to_waiting_and_not_rag(conn):
+    insert_disclosure(conn)
+    status, rag, text = conn.execute("SELECT text_status, rag_target, text FROM disclosure").fetchone()
+    assert (status, rag, text) == ("대기", 0, None)
+
+
+@pytest.mark.parametrize("column, value", [("pblntf_ty", "C"), ("pblntf_ty", "E"), ("text_status", "완료"), ("rag_target", 2)])
+def test_disclosure_rejects_values_outside_scope(conn, column, value):
+    with pytest.raises(sqlite3.IntegrityError):
+        insert_disclosure(conn, **{column: value})
+
+
+def test_disclosure_requires_list_fields(conn):
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO disclosure (rcept_no, corp_code) VALUES ('r1', '00164779')")
+
+
+def test_issue_evidence_can_reference_disclosure(conn):
+    insert_disclosure(conn, rcept_no="r1")
+    conn.execute(
+        "INSERT INTO issues (issue_id, tech_tag, start_date, end_date, peak_date, peak_share, article_count, method) "
+        "VALUES ('HBM-2024-04', 'HBM', '2024-04-01', '2024-04-30', '2024-04-01', 0.1, 10, 'v1')"
+    )
+    conn.execute("INSERT INTO issue_evidence (issue_id, rcept_no, match_type) VALUES ('HBM-2024-04', 'r1', '기간')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO issue_evidence (issue_id, rcept_no, match_type) VALUES ('HBM-2024-04', '없음', '기간')")
