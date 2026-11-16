@@ -237,3 +237,62 @@ def test_parse_main_updates_db_and_is_repeatable(tmp_path, monkeypatch):
     assert status == {"a1": "확보", "i1": "대상아님", "b1": "대기"}
     total = summary[summary["pblntf_ty"] == "합계"].iloc[0]
     assert (total["확보"], total["대상아님"], total["대기"]) == (1, 1, 1)
+
+
+# ── relevance_review (공시 관련성 표본 검수) ──
+
+from src.dart import relevance_review
+
+
+def fake_disclosures():
+    rows = []
+    for i in range(30):
+        rows.append({"rcept_no": f"b{i:02d}", "corp_name": "SK하이닉스", "report_nm": "주요사항보고서(자기주식처분결정)",
+                     "rcept_dt": "2024-01-01", "pblntf_ty": "B", "url": "u", "text": "자기주식 처분 임직원 보상",
+                     "text_status": "확보", "rag_target": 1, "filter_reason": None})
+    rows.append({"rcept_no": "a01", "corp_name": "SK하이닉스", "report_nm": "사업보고서", "rcept_dt": "2024-03-01",
+                 "pblntf_ty": "A", "url": "u", "text": "당사는 HBM3E 양산을 시작했다. HBM 매출 증가",
+                 "text_status": "확보", "rag_target": 1, "filter_reason": None})
+    rows.append({"rcept_no": "i01", "corp_name": "삼성전자", "report_nm": "현금ㆍ현물배당결정", "rcept_dt": "2024-01-31",
+                 "pblntf_ty": "I", "url": "u", "text": None, "text_status": "대상아님", "rag_target": 0,
+                 "filter_reason": "I_공시명"})
+    return pd.DataFrame(rows)
+
+
+def test_build_sample_is_stratified_and_repeatable():
+    strata = {("A", "RAG대상"): None, ("B", "RAG대상"): 20, ("I", "제외"): 15}
+    s1 = relevance_review.build_sample(fake_disclosures(), strata)
+    s2 = relevance_review.build_sample(fake_disclosures().sample(frac=1, random_state=1), strata)
+    assert s1["rcept_no"].tolist() == s2["rcept_no"].tolist()  # 입력 순서가 달라도 같은 표본
+    counts = s1.groupby(["pblntf_ty", "stratum"]).size().to_dict()
+    assert counts == {("A", "RAG대상"): 1, ("B", "RAG대상"): 20, ("I", "제외"): 1}
+    a = s1[s1["rcept_no"] == "a01"].iloc[0]
+    assert a["hbm_count"] == 2 and "HBM3E" in a["context"]
+    assert "원문 미수집" in s1[s1["rcept_no"] == "i01"].iloc[0]["context"]
+    assert list(s1.columns) == relevance_review.REVIEW_COLUMNS
+
+
+def test_relevance_table_counts_levels():
+    labels = pd.DataFrame({
+        "pblntf_ty": ["A", "A", "B", "B", "B", "I"],
+        "stratum": ["RAG대상", "RAG대상", "RAG대상", "RAG대상", "RAG대상", "제외"],
+        "label": [2, 1, 0, 0, None, 1],
+    })
+    t = relevance_review.relevance_table(labels).set_index(["pblntf_ty", "stratum"])
+    assert t.loc[("A", "RAG대상"), "relevant_rate"] == 1.0
+    assert t.loc[("A", "RAG대상"), "n_direct"] == 1
+    assert t.loc[("B", "RAG대상"), "n_labeled"] == 2 and t.loc[("B", "RAG대상"), "relevant_rate"] == 0.0
+    assert t.loc[("I", "제외"), "meaning"] == "놓친 비율"
+
+
+def test_relevance_table_rejects_bad_label():
+    with pytest.raises(ValueError):
+        relevance_review.relevance_table(pd.DataFrame({"pblntf_ty": ["A"], "stratum": ["RAG대상"], "label": [3]}))
+
+
+def test_sample_main_does_not_overwrite_labels(tmp_path):
+    path = tmp_path / "review.csv"
+    path.write_text("labels", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        relevance_review.sample_main(path=path, db_path=tmp_path / "none.db")
+    assert path.read_text(encoding="utf-8") == "labels"
