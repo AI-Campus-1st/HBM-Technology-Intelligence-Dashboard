@@ -93,6 +93,38 @@ def test_samsung_short_form_with_semiconductor_context():
     assert next(r for r in rows if r["tag"] == "삼성전자")["body_count"] == 2
 
 
+@pytest.mark.parametrize(
+    "title",
+    [
+        "삼성·SK, SEDEX서 차세대 HBM 격돌",     # 04 검수에서 놓친 제목 형태 (regex_v3)
+        "삼성 “올해 HBM 공급 2배 확대”",
+        "삼성도 뛰어든 ‘무한확장 메모리’",
+        "삼전닉스 질주에 HBM ETF도 날았다",
+    ],
+)
+def test_samsung_short_forms_in_title(title):
+    assert tags_of(tagging.tag_article("n1", title, ""))["삼성전자"] == "핵심"
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["삼성SDI 배터리", "삼성바이오로직스 실적", "삼성물산 건설", "삼성생명 보험", "삼성디스플레이 OLED",
+     "삼성전기 MLCC", "삼성SDS 클라우드", "삼성중공업 수주", "삼성증권 리포트", "삼성액티브자산운용 ETF",
+     "삼성동 코엑스", "삼성그룹 인사"],
+)
+def test_samsung_affiliates_and_places_excluded(text):
+    assert "삼성전자" not in tags_of(tagging.tag_article("n1", text, ""))
+
+
+@pytest.mark.parametrize("title", ["삼성·SK, HBM 경쟁", "SK하닉 영업익 급증", "삼전닉스 질주"])
+def test_hynix_short_forms_in_title(title):
+    assert tags_of(tagging.tag_article("n1", title, ""))["SK하이닉스"] == "핵심"
+
+
+def test_sk_group_alone_is_not_hynix():
+    assert "SK하이닉스" not in tags_of(tagging.tag_article("n1", "SK텔레콤·SK이노베이션 실적", "SK그룹 회장"))
+
+
 def test_hynix_variants():
     rows = tagging.tag_article("n1", "제목", "SK 하이닉스와 SK hynix")
     assert next(r for r in rows if r["tag"] == "SK하이닉스")["body_count"] == 2
@@ -210,3 +242,96 @@ def test_review_sample_within_condition_and_exclude(tmp_path):
         within={"SK하이닉스": ("HBM", ("핵심", "관련"))}, exclude_urls={"u3"},
     )
     assert list(sample["url"]) == ["u1"]
+
+
+# ── 뉴스 적재 (load_news) ──
+
+import sqlite3
+from datetime import date
+
+from src.common import db as dbmod
+from src.news import load_news as ln
+
+
+def _raw(rows):
+    """제공 CSV와 같은 컬럼의 원본 DataFrame."""
+    cols = ["제목", "본문전문", "원문URL", "발행일", "매체명", "문서종류", "수집키워드"]
+    return pd.DataFrame(rows, columns=cols)
+
+
+def test_make_news_id_is_stable_16_hex():
+    a = ln.make_news_id("https://example.com/1")
+    assert a == ln.make_news_id("https://example.com/1") and len(a) == 16
+    assert a != ln.make_news_id("https://example.com/2")
+
+
+@pytest.mark.parametrize(
+    "keyword, expected",
+    [
+        ("반도체 R&D", "기술 및 트렌드"),
+        ("반도체 원자재", "공급망 및 인프라"),
+        # 키워드 순서가 달라도 카테고리는 정해진 순서로 저장 (Day 1 검증에서 발견한 문제)
+        ("반도체 밸류체인; 반도체 수출 통제", "규제 및 정책; 공급망 및 인프라"),
+        ("반도체 수출 통제; 반도체 밸류체인", "규제 및 정책; 공급망 및 인프라"),
+        # 같은 카테고리 키워드 두 개는 한 번만
+        ("반도체 수출 통제; 반도체 세제 혜택", "규제 및 정책"),
+    ],
+)
+def test_to_category_is_canonical(keyword, expected):
+    assert ln.to_category(keyword) == expected
+
+
+def test_to_category_rejects_unknown_keyword():
+    with pytest.raises(ValueError):
+        ln.to_category("반도체 마케팅")
+
+
+def test_transform_maps_columns_and_cleans_values():
+    raw = _raw([
+        ("제목1", "본문", "u1", "2024-05-08T08:27:00", "매체A", "news", "반도체 R&D"),
+        ("제목2", None, "u2", "2024-05-09T10:00:00", "매체B", "news", "반도체 원자재"),
+        ("제목3", "   ", "u3", "2024-05-10T10:00:00", "매체B", "news", "반도체 원자재"),
+    ])
+    out = ln.transform(raw, date(2023, 10, 19), date(2026, 10, 19))
+    assert list(out.columns) == [c.name for c in ln.schema.TABLES["news"].columns]
+    assert list(out["published_at"]) == ["2024-05-08", "2024-05-09", "2024-05-10"]
+    assert out["content"].iloc[1:].isna().all()  # 결측·공백 본문은 결측값 → DB에는 NULL (pandas 버전에 따라 None/NaN)
+    assert set(out["is_duplicate"]) == {0} and out["dup_group_id"].isna().all()
+
+
+def test_transform_drops_rows_outside_period():
+    raw = _raw([
+        ("안", "b", "u1", "2023-10-19T00:00:00", "m", "news", "반도체 R&D"),  # 시작일 포함
+        ("밖", "b", "u2", "2023-10-18T23:59:00", "m", "news", "반도체 R&D"),
+        ("끝", "b", "u3", "2026-10-19T23:00:00", "m", "news", "반도체 R&D"),  # 종료일 포함
+    ])
+    out = ln.transform(raw, date(2023, 10, 19), date(2026, 10, 19))
+    assert list(out["title"]) == ["안", "끝"]
+
+
+def test_transform_rejects_duplicate_url():
+    raw = _raw([
+        ("a", "b", "u1", "2024-01-01T00:00:00", "m", "news", "반도체 R&D"),
+        ("c", "d", "u1", "2024-01-02T00:00:00", "m", "news", "반도체 R&D"),
+    ])
+    with pytest.raises(ValueError):
+        ln.transform(raw, date(2023, 10, 19), date(2026, 10, 19))
+
+
+def test_load_is_rerunnable(tmp_path):
+    csv = tmp_path / "news.csv"
+    _raw([
+        ("a", "b", "u1", "2024-01-01T00:00:00", "m", "news", "반도체 R&D"),
+        ("c", None, "u2", "2024-01-02T00:00:00", "m", "news", "반도체 수출 통제"),
+    ]).to_csv(csv, index=False, encoding="utf-8-sig")
+    db_path = tmp_path / "t.db"
+    dbmod.init_db(db_path)
+    for _ in range(2):  # 두 번 돌려도 결과가 같아야 한다
+        conn = dbmod.connect(db_path)
+        stats = ln.load(csv, conn, date(2023, 10, 19), date(2026, 10, 19))
+        conn.close()
+    conn = dbmod.connect(db_path)
+    assert conn.execute("SELECT COUNT(*) FROM news").fetchone()[0] == 2
+    conn.close()
+    assert stats["rows"] == 2 and stats["missing_content"] == 1
+    assert stats["by_category"] == {"기술 및 트렌드": 1, "규제 및 정책": 1}

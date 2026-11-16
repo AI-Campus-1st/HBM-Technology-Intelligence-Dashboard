@@ -1,11 +1,16 @@
 """
 정규표현식 규칙으로 뉴스에 기술·기업 태그와 관련도 등급을 붙인다 (news_tag 테이블용).
 
-관련도 기준 (regex_v2):
+관련도 기준 (regex_v2부터, v3에서 유지):
     핵심: 제목에 포함 / 관련: 본문에 5회 이상 / 언급: 본문에 1~4회
     v1(관련 = 본문 2회 이상)은 표본 검수에서 '관련' 정밀도가 0.53(02 데이터)·0.20(04 데이터)으로 낮았다.
     본문 5회 이상으로 올리면 0.92·0.83이 되어 v2 기준으로 채택했다. (outputs/reports/tag_precision_*.csv)
 규칙을 바꾸면 RULE_VERSION을 올려 어떤 규칙으로 만든 태그인지 추적한다.
+
+regex_v3: 기업 약칭 보강. v2는 '삼성' 뒤에 반도체 단어가 바로 와야만 삼성전자로 인정해
+'삼성·SK', '삼성 “…”', '삼성도' 같은 제목을 놓쳤다(04 검수 삼성 '언급' 15건 중 3건).
+v3는 '삼성' 뒤에 계열사·지명이 오지 않으면 삼성전자로 보고, '삼전'·'하닉'·'삼전닉스' 같은 약칭과
+'삼성·SK'의 SK를 인정한다.
 
 사용 원칙: 기업 태그는 이름만 나열된 기사가 많아 단독 정밀도가 낮다(04 '관련' 0.15~0.45).
 기업별 보도 점유·감성은 HBM 핵심·관련 기사 안에서만 집계한다.
@@ -22,10 +27,17 @@ from typing import Optional
 
 from src.common.schema import COMPANY_TAGS, TECH_TAGS
 
-RULE_VERSION = "regex_v2"
+RULE_VERSION = "regex_v3"
 
 # 관련도 경계값: 본문 언급이 이 횟수 이상이면 '관련'
 RELATED_MIN_BODY_COUNT = 5
+
+# '삼성' 뒤에 오면 삼성전자가 아닌 것으로 보는 말 (계열사·지명·그룹). 앞의 것이 우선이라 긴 이름을 먼저 둔다.
+SAMSUNG_EXCLUDE = (
+    "SDI", "SDS", "에스디에스", "바이오", "물산", "생명", "화재", "증권", "카드", "선물", "자산운용", "액티브",
+    "디스플레이", "전기", "중공업", "E&A", "엔지니어링", "웰스토리", "벤처", "글로벌리서치", "서울병원",
+    "의료원", "재단", "라이온즈", "그룹", "동", "역", "로", "타운", "리서치",
+)
 
 # (태그 종류, 태그, 패턴). 오탐을 줄이려고 넓은 단어는 앞뒤 문맥을 붙였다.
 TAG_RULES: tuple[tuple[str, str, re.Pattern], ...] = (
@@ -38,10 +50,14 @@ TAG_RULES: tuple[tuple[str, str, re.Pattern], ...] = (
     )),
     # DDR5·LPDDR5X·GDDR7 같은 D램 규격 포함
     ("tech", "DRAM", re.compile(r"DRAM|D램|디램|(?:LP|G)?DDR\d")),
-    ("company", "SK하이닉스", re.compile(r"SK\s*하이닉스|하이닉스|SK\s*hynix", re.IGNORECASE)),
-    # '삼성' 단독은 삼성SDI·삼성바이오 등 계열사와 섞이므로 반도체 문맥이 바로 뒤에 올 때만 인정한다.
+    # 'SK' 단독은 SK그룹·SK텔레콤 등과 섞이므로 '삼성·SK'처럼 삼성과 나란히 쓴 경우만 인정한다.
+    ("company", "SK하이닉스", re.compile(
+        r"SK\s*하이닉스|하이닉스|SK\s*hynix|하닉|(?<=삼전)닉스|(?<=삼성·)SK(?![A-Za-z가-힣])|(?<=삼성, )SK(?![A-Za-z가-힣])",
+        re.IGNORECASE,
+    )),
+    # '삼성' 뒤에 계열사·지명이 오면 제외하고, 그 밖의 '삼성'(삼성·SK, 삼성도, 삼성 “…”)은 삼성전자로 본다.
     ("company", "삼성전자", re.compile(
-        r"삼성전자|삼성(?=\s*(?:HBM|D램|DRAM|메모리|반도체|파운드리))|Samsung\s+Electronics",
+        r"삼성전자|삼전|Samsung\s+Electronics|삼성(?!\s*(?:" + "|".join(SAMSUNG_EXCLUDE) + r"))",
         re.IGNORECASE,
     )),
 )
