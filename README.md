@@ -91,6 +91,13 @@ copy .env.example .env
 
 > 2·7·9(김한승)와 3~6·10(한도윤)은 서로 독립이라 병행할 수 있습니다.
 
+**각자 로컬 DB 맞추기:** DB 파일은 주고받지 않고, 같은 코드 + 같은 입력(DART 원본 zip, LLM 결과 파일)으로 각자 다시 만듭니다. 자세한 규칙은 [`docs/conventions.md` §5](docs/conventions.md)를 봅니다.
+
+| 명령 | 용도 |
+|---|---|
+| `python -m src.common.db --rebuild` | DB를 지우고 빈 테이블로 다시 생성 (스키마 변경 후, 처음부터 다시 적재할 때) |
+| `python -m src.common.db --check` | 테이블별 행 수·기본키 지문·FK 위반 출력 → 두 사람 출력이 같으면 같은 DB |
+
 ---
 
 ## 폴더 구조
@@ -176,7 +183,7 @@ mid_project/
 |---|---|
 | `config.py` | `.env` 로딩, 경로 상수(`DATA_DIR`, `DB_PATH`, `VECTORDB_DIR`). 키는 `os.getenv`로만 읽는다. |
 | `schema.py` | 테이블·컬럼 정의 (`docs/schema.md`와 동일하게 유지). |
-| `db.py` | DB 연결, 테이블 생성, 공통 읽기/쓰기 함수. |
+| `db.py` | DB 연결(FK 켜기), 테이블 생성·재생성, `read_table`·`write_table`(재실행해도 같은 결과), `--check`로 두 컴퓨터 DB 비교. |
 
 ### `src/news/` — 뉴스 [김한승]
 
@@ -243,7 +250,7 @@ mid_project/
 | `vectordb/` | 공시 임베딩 저장소. |
 | `labels/` | **커밋 대상.** 사람이 검수한 표본 라벨. 정확도 근거 자료. |
 
-> 데이터는 git에 올리지 않습니다. 실행 순서대로 스크립트를 돌려 재생성하거나, 큰 DB·벡터 DB는 공유 드라이브로 주고받습니다.
+> 데이터는 git에 올리지 않습니다. 각자 실행 순서대로 스크립트를 돌려 DB를 재생성하고, DART 원본·LLM 결과·벡터 DB만 공유 드라이브로 주고받습니다 (`docs/conventions.md` §5).
 
 ### 기타
 

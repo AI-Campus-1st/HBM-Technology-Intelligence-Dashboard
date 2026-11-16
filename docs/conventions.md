@@ -25,6 +25,27 @@
 | 리포트 | `docs/report/` 장별 파일로 분리 |
 | 줄바꿈(CRLF/LF) | `.gitattributes`로 LF 통일 |
 
-## 5. 데이터 공유
-- `data/` 안 내용은 git에 올리지 않는다. 같은 결과가 필요하면 README 실행 순서대로 스크립트를 돌리거나, 용량이 큰 DB/벡터 DB는 공유 드라이브로 전달한다.
-- 사람이 만든 표본 검수 결과(`data/labels/`)만 커밋한다.
+## 5. 데이터 공유 (각자 로컬 DB)
+두 사람은 각자 컴퓨터의 `data/db/hbm.db`에 적재한다. **DB 파일은 주고받지 않는다.** 같은 코드와 같은 입력으로 각자 DB를 다시 만든다.
+
+### 원칙
+- **스키마·연결은 git 하나로:** 테이블 구조는 `src/common/schema.py`, 연결·읽기·쓰기는 `src/common/db.py`만 쓴다. 스키마를 바꾸면 PR로 합의하고, 상대에게 "pull 후 `--rebuild`" 하라고 알린다.
+- **적재 스크립트는 자기 테이블만, 다시 돌려도 같은 결과:** `db.write_table(..., mode="replace")`(테이블 비우기 + 넣기, 한 트랜잭션)를 쓴다.
+  - 김한승: `news`, `news_tag`, `news_analysis`, `issues` / 한도윤: `disclosure` / 공동: `issue_evidence`
+  - `issue_evidence`는 `news`·`disclosure`를 참조하므로 두 적재가 끝난 뒤에 넣는다.
+- **DB 대신 입력을 공유한다:**
+
+| 데이터 | 만드는 사람 | 공유 방법 |
+|---|---|---|
+| 뉴스 CSV (`data/raw/news/`) | 제공 | 둘 다 같은 제공 파일 사용 (`config.NEWS_CSV`) |
+| DART 원본 (`data/raw/dart/`) | 한도윤 | 수집 후 폴더를 zip으로 공유 드라이브에 올림. 김한승은 풀어서 `parse_documents`만 실행 (API 키·호출 불필요) |
+| LLM 분류 결과 | 김한승 | 다시 만들면 비용이 들고 결과가 달라지므로 `data/processed/`에 파일(CSV 등)로 저장해 공유. DB 적재는 그 파일을 읽어서 한다 |
+| 벡터 DB (`data/vectordb/`) | 한도윤 | 공유 드라이브로 전달 |
+
+- 사람이 만든 표본 검수 결과(`data/labels/`)만 git에 커밋한다. 나머지 `data/`는 커밋하지 않는다.
+
+### 맞춰 보기 (하루 끝, 또는 상대 데이터가 바뀌었을 때)
+1. `git pull origin main`, 상대가 올린 원본(DART zip, LLM 결과 파일)을 받아 같은 경로에 둔다.
+2. `python -m src.common.db --rebuild` 후 README 실행 순서대로 다시 적재한다.
+3. `python -m src.common.db --check` 출력을 서로 비교한다. **테이블별 행 수와 기본키 지문이 같고 FK 위반이 0건**이면 같은 DB다.
+4. 다르면 어느 테이블이 다른지 보고 그 테이블 담당자가 입력 파일·코드 버전을 확인한다. 결과를 작업 일지에 적는다.
