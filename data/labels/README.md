@@ -24,3 +24,18 @@
 - `note`: 애매한 이유, `labeler`: 판정한 사람 (예: `한도윤`, `claude_1차` → 사람 확인 후 이름으로 바꿈)
 - 다 채우면 `python -m src.dart.relevance_review score` → `outputs/reports/disclosure_relevance_v1.csv`
 - 표본을 다시 뽑으려면 `sample --force` (채운 라벨이 지워지므로 주의)
+
+## issue_evidence_review_v1.csv — 급증 구간 근거 후보 확인 (공동)
+
+`python -m src.dart.issue_evidence`가 급증 구간(`issues`)마다 근거 공시 후보를 만들어 이 파일에 빈 `verified`로 추가한다. 사람이 채운 값은 다시 실행해도 지워지지 않고 DB `issue_evidence.verified`에 반영된다. 이 파일을 git으로 공유하기 때문에, 각자 DB를 다시 만들어도 확인 결과가 같다.
+
+| 열 | 내용 |
+|---|---|
+| `issue_id`, `rcept_no`, `news_id`, `match_type` | 후보 키 (고치지 않는다). `키워드` = 기사↔공시 연결, `기간` = 구간 안 사건성 공시(기사 없음) |
+| `corp_name` ~ `url` | 판정용 참고 (공시명·제출일·대표 기사 제목·공시 링크). 읽을 때는 쓰지 않는다 |
+| `verified` | `1` 이 공시(와 기사)가 급증의 배경 근거가 맞다 / `0` 기각 / 빈칸 미확인 |
+| `note`, `reviewer` | 근거 요약 또는 기각 이유, 판정한 사람 |
+
+- **판정 기준:** 공시 내용이 그 구간의 HBM 보도와 같은 사건을 다루면 `1`이다. 예: 신규시설투자 공시와 그 공장 보도, 잠정실적 공시와 HBM 실적 콘퍼런스콜 보도. 같은 회사가 같은 무렵에 냈을 뿐인 공시는 `0`이다. 예: 계열사 FAB 공사 거래, ADR 상장 풍문 해명.
+- **수동 근거:** 사람이 찾은 근거는 `match_type=수동` 행으로 직접 추가한다 (`rcept_no`나 `news_id` 중 하나 이상).
+- 대시보드 근거 카드에는 `verified=1`만 올린다.

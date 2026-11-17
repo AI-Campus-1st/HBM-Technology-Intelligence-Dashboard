@@ -89,6 +89,7 @@ copy .env.example .env
 | 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
 | 7-2 | `python -m src.dart.sql_report` | 한도윤 | 공시 SQL 집계 `sql/05_*.sql` 실행 (7·6-1 `--apply` 다음. `outputs/reports/sql05_*.csv`) |
 | 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 (방식 B `rolling6m_2sigma_exclude_spikes_min10_v1` → `issues`, 미리보기 `--dry-run`, 비교 `--method-a`) |
+| 8-1 | `python -m src.dart.issue_evidence` | 공동 | 급증 구간별 근거 공시 후보 → `issue_evidence` (8·6-1 다음. 사람 확인은 `data/labels/issue_evidence_review_v1.csv`의 `verified`를 채우고 다시 실행) |
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
 | 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB |
 | 11 | `streamlit run dashboard/app.py` | 공동 | 대시보드 실행 |
@@ -206,6 +207,7 @@ mid_project/
 | `collect_documents.py` | Day 2 | 공시서류원본파일 API로 원문 다운로드. |
 | `parse_documents.py` | Day 2~3 | 원문에서 텍스트를 추출해 DB에 적재. 정기보고서를 'II. 사업의 내용' 소제목(사업·제품·투자·연구개발)과 삼성전자 연구개발실적(상세)으로 나누고, R&D 비용·매출 대비 비율·시설투자액을 뽑는다. |
 | `relevance_review.py` | Day 2~3 | 공시 관련성 표본 검수 (sample → 라벨 → score). |
+| `issue_evidence.py` | Day 3 | 급증 구간(`issues`)별 근거 공시 후보: 구간 안 기사와 연결된 공시(`키워드`) + 구간 안 사건성 공시(`기간`). 사람 확인 결과(`data/labels/issue_evidence_review_v1.csv`)를 반영해 `issue_evidence`를 다시 쓴다. |
 | `sql_report.py` | Day 3 | `sql/05_*.sql` 공시 집계 쿼리를 실행해 `outputs/reports/sql05_*.csv`로 저장. |
 | `news_link.py` | Day 3 | HBM 기사와 공시 연결(`link_v2`: 주 대상 기업·±7일·주제) → `issue_evidence` 후보, RAG 대상 재선정(A 정기공시 + HBM 언급 + 뉴스 연결, 실적 주제만으로 연결된 공시는 제외). |
 
