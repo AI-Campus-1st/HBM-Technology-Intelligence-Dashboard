@@ -16,8 +16,9 @@
 
 사람 검수 (각자 DB를 다시 만들어도 같은 결과가 나오도록 git의 라벨 파일로 공유한다):
     data/labels/issue_evidence_review_v1.csv (issue_id, rcept_no, news_id, match_type, verified, note, reviewer)
-    - 실행할 때마다 새 후보를 빈 verified로 추가하고, 채운 행(verified 0/1)과 '수동' 행은 그대로 둔다.
+    - 실행할 때마다 새 후보를 빈 verified로 추가하고, 채운 행(verified 0/1 또는 note)과 '수동' 행은 그대로 둔다.
       더는 후보가 아닌 빈 행은 지운다.
+    - 맨 끝 key 열이 진짜 키다. Excel로 열어 저장해도(rcept_no 지수 표기, cp949) key로 복구해서 읽는다.
     - verified=1이면 DB에 1, 0이면 기각(DB 0, note에 '기각')으로 넣는다. '수동' 행은 사람이 직접 추가한 근거다.
 
 DB 반영: issue_evidence를 통째로 다시 쓴다 (replace). evidence_id는 정렬 순서로 1부터 매긴다 →
@@ -127,21 +128,48 @@ def _key_frame(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def row_key(issue_id, rcept_no, news_id, match_type) -> str:
+    """라벨 파일의 key 열. 'HBM-2024-10|20241031800024|0339cd...|키워드' — 글자가 섞여 Excel이 숫자로 바꾸지 못한다."""
+    return "|".join("" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
+                    for v in (issue_id, rcept_no, news_id, match_type))
+
+
+def _read_csv_any(path: Path) -> pd.DataFrame:
+    """UTF-8로 읽고, 안 되면 cp949(Excel 한국어판 'CSV' 저장)로 읽는다."""
+    try:
+        return pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return pd.read_csv(path, dtype=str, keep_default_na=False, encoding="cp949")
+
+
 def load_review(path: Path = REVIEW_PATH) -> pd.DataFrame:
-    """라벨 파일을 읽는다. 없으면 빈 표."""
+    """라벨 파일을 읽는다. 없으면 빈 표.
+
+    key 열이 있으면 키 4개(issue_id·rcept_no·news_id·match_type)를 key에서 다시 만든다. Excel로 저장하면
+    rcept_no가 '2.0241E+13'처럼 지수 표기로 바뀌어 원래 값을 잃기 때문이다. key 없이 rcept_no가 깨져 있으면 멈춘다.
+    key가 빈 행(사람이 새로 추가한 '수동' 행)은 키 열을 그대로 쓴다.
+    """
     if not path.exists():
         return pd.DataFrame(columns=REVIEW_COLUMNS)
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
-    for col in REVIEW_COLUMNS:
+    df = _read_csv_any(path)
+    for col in REVIEW_COLUMNS + ["key"]:
         if col not in df:
             df[col] = ""
+    has_key = df["key"].str.count(r"\|") == 3
+    parts = df.loc[has_key, "key"].str.split("|", expand=True)
+    if has_key.any():
+        df.loc[has_key, KEY] = parts.values
+    broken = df["rcept_no"].str.contains(r"[Ee][+-]|\.", regex=True)
+    if broken.any():
+        raise ValueError(f"{path}: rcept_no가 숫자로 바뀐 행이 있습니다 (Excel 저장). git의 원본으로 되돌리거나 "
+                         f"key 열을 지우지 말고 다시 저장하세요. 행: {df.index[broken].tolist()[:5]}")
     df = df[REVIEW_COLUMNS].replace({"": None})
     return _key_frame(df)
 
 
 def merge_review(candidates: pd.DataFrame, review: pd.DataFrame) -> pd.DataFrame:
-    """새 라벨 표: 기존의 채운 행·수동 행 + 새 후보 빈 행. 후보가 아닌 빈 행은 버린다."""
-    keep = review[review["verified"].notna() | (review["match_type"] == "수동")]
+    """새 라벨 표: 기존의 채운 행(verified 또는 note)·수동 행 + 새 후보 빈 행. 후보가 아닌 빈 행은 버린다."""
+    keep = review[review["verified"].notna() | review["note"].notna() | (review["match_type"] == "수동")]
     fresh = candidates[KEY].copy()
     for col in ("verified", "note", "reviewer"):
         fresh[col] = None
@@ -227,7 +255,8 @@ def with_context(review: pd.DataFrame, table: pd.DataFrame) -> pd.DataFrame:
     context = context.assign(_n=context["news_id"].fillna(""), _r=context["rcept_no"].fillna(""))
     merged = keyed.merge(context.drop(columns=["news_id", "rcept_no"]),
                          on=["issue_id", "_r", "_n", "match_type"], how="left")
-    return merged[KEY + CONTEXT_COLUMNS + ["verified", "note", "reviewer"]]
+    merged["key"] = [row_key(*k) for k in merged[KEY].itertuples(index=False)]
+    return merged[KEY + CONTEXT_COLUMNS + ["verified", "note", "reviewer", "key"]]
 
 
 def clear(db_path: Path = config.DB_PATH) -> int:

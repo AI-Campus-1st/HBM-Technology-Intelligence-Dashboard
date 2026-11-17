@@ -136,3 +136,28 @@ def test_main_writes_db_and_review_file_reproducibly(tmp_path):
     assert pd.read_csv(review_path, dtype=str, keep_default_na=False)["verified"].tolist() == ["1", ""]
     assert ie.clear(path) == 2
     assert review_path.exists()  # 라벨 파일은 그대로
+
+
+def test_load_review_recovers_keys_after_excel_save(tmp_path):
+    """Excel 저장: cp949 인코딩 + rcept_no 지수 표기. key 열로 원래 키를 되살린다."""
+    path = tmp_path / "review.csv"
+    pd.DataFrame([
+        {"issue_id": "HBM-2024-10", "rcept_no": "2.0241E+13", "news_id": "", "match_type": "기간",
+         "report_nm": "잠정실적", "verified": "1", "note": "실적 발표", "reviewer": "",
+         "key": ie.row_key("HBM-2024-10", "20241024800002", None, "기간")},
+        {"issue_id": "HBM-2024-10", "rcept_no": "", "news_id": "n7", "match_type": "수동",
+         "report_nm": "", "verified": "1", "note": "", "reviewer": "", "key": ""},
+        {"issue_id": "HBM-2024-10", "rcept_no": "2.0241E+13", "news_id": "", "match_type": "기간",
+         "report_nm": "", "verified": "", "note": "확인 중", "reviewer": "",
+         "key": ie.row_key("HBM-2024-10", "20241031800024", None, "기간")},
+    ]).to_csv(path, index=False, encoding="cp949")
+    review = ie.load_review(path)
+    assert review["rcept_no"].fillna("-").tolist() == ["20241024800002", "-", "20241031800024"]
+    assert review["news_id"].fillna("-").tolist() == ["-", "n7", "-"]
+    merged = ie.merge_review(ie._key_frame(pd.DataFrame(columns=ie.KEY)), review)
+    assert len(merged) == 3  # note만 있는 행도 남는다
+
+    broken = pd.read_csv(path, dtype=str, encoding="cp949", keep_default_na=False).drop(columns="key")
+    broken.to_csv(path, index=False, encoding="cp949")
+    with pytest.raises(ValueError, match="rcept_no"):
+        ie.load_review(path)
