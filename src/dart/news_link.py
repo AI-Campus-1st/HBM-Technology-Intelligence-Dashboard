@@ -38,7 +38,7 @@ from src.news import tagging
 
 LINK_VERSION = "link_v1"
 WINDOW_DAYS = 30
-HBM_RELEVANCE = ("핵심", "관련")  # 분석 대상 HBM 기사 (regex_v2 이후 추정 정밀도 0.95)
+HBM_RELEVANCE = ("핵심", "관련")  # 분석 대상 HBM 기사 (사람 검수 반영 추정 정밀도 0.83·재현율 0.85, 2026-11-16)
 
 LINKS_PATH = config.PROCESSED_DIR / "disclosure_news_links.csv"
 SUMMARY_PATH = config.OUTPUTS_DIR / "reports" / "disclosure_rag_link_summary.csv"
