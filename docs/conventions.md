@@ -48,4 +48,5 @@
 1. `git pull origin main`, 상대가 올린 원본(DART zip, LLM 결과 파일)을 받아 같은 경로에 둔다.
 2. `python -m src.common.db --rebuild` 후 README 실행 순서대로 다시 적재한다.
 3. `python -m src.common.db --check` 출력을 서로 비교한다. **테이블별 행 수와 기본키 지문이 같고 FK 위반이 0건**이면 같은 DB다.
+   - 지문은 기본키만 보므로 값의 차이는 잡지 못한다. 그래서 `disclosure.rag_target`은 RAG 대상 건수(75건)로, `issue_evidence.verified`는 `python -m src.dart.issue_evidence` 출력의 '사람 확인 N행'으로 따로 맞춰 본다.
 4. 다르면 어느 테이블이 다른지 보고 그 테이블 담당자가 입력 파일·코드 버전을 확인한다. 결과를 작업 일지에 적는다.
