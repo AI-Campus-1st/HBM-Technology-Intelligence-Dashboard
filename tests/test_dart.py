@@ -216,8 +216,15 @@ def test_parse_one_marks_failures(tmp_path):
     assert parse_documents.parse_one("short", "A", tmp_path)["filter_reason"] == "본문없음"
 
 
-def test_parse_main_updates_db_and_is_repeatable(tmp_path, monkeypatch):
-    monkeypatch.setattr(parse_documents, "SUMMARY_PATH", tmp_path / "summary.csv")
+@pytest.fixture
+def section_outputs(tmp_path, monkeypatch):
+    """섹션 추출 결과를 실제 data/·outputs/ 대신 임시 폴더에 쓴다."""
+    for name in ("SUMMARY_PATH", "SECTIONS_PATH", "SECTION_SUMMARY_PATH", "RND_CAPEX_PATH"):
+        monkeypatch.setattr(parse_documents, name, tmp_path / "out" / f"{name.lower()}.csv")
+    return tmp_path / "out"
+
+
+def test_parse_main_updates_db_and_is_repeatable(tmp_path, section_outputs):
     doc_dir = tmp_path / "docs"
     write_zip(doc_dir, "a1", DART_XML)
     conn = db.connect(db.init_db(tmp_path / "t.db"))
@@ -237,3 +244,78 @@ def test_parse_main_updates_db_and_is_repeatable(tmp_path, monkeypatch):
     assert status == {"a1": "확보", "i1": "대상아님", "b1": "대기"}
     total = summary[summary["pblntf_ty"] == "합계"].iloc[0]
     assert (total["확보"], total["대상아님"], total["대기"]) == (1, 1, 1)
+
+
+# ── 정기보고서 섹션 추출 (Day 3) ──
+
+# 실제 정기보고서 텍스트와 같은 모양: 목차 → 본문, 3번 안의 '4. 투자계획(현황)', 표는 한 칸씩 줄바꿈
+REPORT_TEXT = "\n".join([
+    "I. 회사의 개요", "II. 사업의 내용", "1. 사업의 개요", "6. 주요계약 및 연구개발활동", "III. 재무에 관한 사항",  # 목차
+    "I. 회사의 개요", "본문 회사 개요",
+    "II. 사업의 내용",
+    "1. 사업의 개요", "당사는 메모리 반도체를 만든다.",
+    "2. 주요 제품 및 서비스", "HBM3E 12단 양산",
+    "3. 원재료 및 생산설비", "가. 주요 원재료", "4. 투자계획(현황)", "(단위: 십억원)", "구분", "보완투자 등",
+    "2025.01.01~2025.12.31", "30,173", "누적실적", "합 계", "30,173", "-",
+    "4. 매출 및 수주상황", "매출 표",
+    "5. 위험관리 및 파생거래", "환율",
+    "6. 주요계약 및 연구개발활동", "가. 주요 계약", "나. 연구개발활동", "2. 연구개발비용", "(단위: 백만원)",
+    "연구개발비용 합계", "6,732,527", "4,954,447", "-",
+    "연구개발비 / 매출액 비율[연구개발비용계÷당기매출액×100]", "6.9%", "7.5%",
+    "다. 연구개발 실적", "HBM4 개발 완료", "고대역폭 메모리",
+    "7. 기타 참고사항", "업계의 현황",
+    "III. 재무에 관한 사항", "1. 요약재무정보", "HBM 매출",
+    "XII. 상세표", "3. 타법인출자 현황(상세)", "출자 표",
+    "4. 연구개발실적(상세)", "☞ 본문 위치로 이동", "DS 부문", "HBM3E 개발",
+    "【 전문가의 확인 】", "1. 전문가의 확인", "해당 없음",
+])
+
+SAMSUNG_FACILITY = "\n".join([
+    "(시설투자 현황) 2023년 중 DS 부문 및 SDC 등의 투자", "(단위 : 억원)", "구 분", "투자액",
+    "DS 부문", "신ㆍ증설, 보완 등", "2023.01~2023.12", "건물ㆍ설비 등", "483,723",
+    "SDC", "신ㆍ증설, 보완 등", "2023.01~2023.12", "건물ㆍ설비 등", "23,856",
+    "합 계", "531,139",
+])
+
+
+def test_split_sections_skips_toc_and_inner_numbering():
+    s = parse_documents.split_sections(REPORT_TEXT)
+    assert list(s)[:7] == [title for _, title, _ in parse_documents.SECTIONS]
+    assert s["사업의 개요"] == "당사는 메모리 반도체를 만든다."  # 목차가 아니라 본문
+    assert "4. 투자계획(현황)" in s["원재료 및 생산설비"]  # 3번 안의 '4.'에서 자르지 않는다
+    assert s["매출 및 수주상황"] == "매출 표"
+    assert s["기타 참고사항"] == "업계의 현황"  # III 앞에서 끝난다
+    assert s[parse_documents.DETAIL_RND] == "DS 부문\nHBM3E 개발\n【 전문가의 확인 】"
+
+
+def test_split_sections_without_part2_is_empty():
+    assert parse_documents.split_sections("주요사항보고서\n신규시설투자") == {}
+
+
+def test_rnd_capex_reads_current_period():
+    sk = parse_documents.rnd_capex(parse_documents.split_sections(REPORT_TEXT))
+    assert sk == {"rnd_expense_mil_krw": 6732527.0, "rnd_to_sales_pct": 6.9,
+                  "capex_100m_krw": 301730.0, "capex_ds_100m_krw": None}  # 십억원 → 억원
+    samsung = parse_documents.rnd_capex({"원재료 및 생산설비": SAMSUNG_FACILITY})
+    assert (samsung["capex_100m_krw"], samsung["capex_ds_100m_krw"]) == (531139.0, 483723.0)
+    assert samsung["rnd_expense_mil_krw"] is None  # 없으면 None
+
+
+def test_sections_main_writes_only_tagged_sections(tmp_path, section_outputs):
+    conn = db.connect(db.init_db(tmp_path / "t.db"))
+    base = {"corp_code": "00164779", "corp_name": "SK하이닉스", "url": "u", "text_status": "확보"}
+    db.write_table(conn, "disclosure", [
+        {**base, "rcept_no": "a1", "pblntf_ty": "A", "report_nm": "사업보고서 (2025.12)",
+         "rcept_dt": "2026-03-17", "text": REPORT_TEXT},
+        {**base, "rcept_no": "b1", "pblntf_ty": "B", "report_nm": "주요사항보고서", "rcept_dt": "2026-01-01",
+         "text": REPORT_TEXT},  # 정기보고서가 아니면 섹션을 뽑지 않는다
+    ])
+    conn.close()
+    sections, numbers = parse_documents.sections_main(db_path=tmp_path / "t.db")
+    assert set(sections["rcept_no"]) == {"a1"} and len(numbers) == 1
+    assert "매출 및 수주상황" not in set(sections["section"])
+    by = sections.set_index("section")
+    assert by.loc["주요계약 및 연구개발활동", "section_type"] == "연구개발"
+    assert by.loc["주요계약 및 연구개발활동", "hbm_count"] == 2  # HBM + 고대역폭
+    assert numbers.iloc[0]["period"] == "2025.12" and numbers.iloc[0]["n_sections"] == 7
+    assert (section_outputs / "sections_path.csv").exists()
