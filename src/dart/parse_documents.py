@@ -241,9 +241,16 @@ def report_period(report_nm: str) -> str | None:
     return m.group(1) if m else None
 
 
+SECTION_TYPES = {title: kind for _, title, kind in SECTIONS if kind} | {DETAIL_RND: "연구개발"}
+
+
+def tagged_sections(sections: dict[str, str]) -> list[tuple[str, str, str]]:
+    """split_sections 결과에서 저장 대상 섹션만 (제목, 성격, 본문)으로. Day 5 chunking도 이 함수를 쓴다."""
+    return [(title, SECTION_TYPES[title], body) for title, body in sections.items() if title in SECTION_TYPES]
+
+
 def extract_sections(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """정기보고서(A)마다 섹션 행(성격이 있는 섹션만)과 R&D·투자 수치 행을 만든다."""
-    keep = {title: kind for _, title, kind in SECTIONS if kind} | {DETAIL_RND: "연구개발"}
     section_rows, number_rows = [], []
     reports = df[(df["pblntf_ty"] == "A") & df["text"].notna()].sort_values(["rcept_dt", "corp_name"])
     for rec in reports.itertuples(index=False):
@@ -252,12 +259,11 @@ def extract_sections(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
             "rcept_dt": rec.rcept_dt, "period": report_period(rec.report_nm),
         }
         sections = split_sections(rec.text)
-        for title, body in sections.items():
-            if title in keep:
-                section_rows.append({
-                    **meta, "url": rec.url, "section": title, "section_type": keep[title],
-                    "n_chars": len(body), "hbm_count": len(HBM_PATTERN.findall(body)), "text": body,
-                })
+        for title, kind, body in tagged_sections(sections):
+            section_rows.append({
+                **meta, "url": rec.url, "section": title, "section_type": kind,
+                "n_chars": len(body), "hbm_count": len(HBM_PATTERN.findall(body)), "text": body,
+            })
         n_part2 = sum(title in sections for _, title, _ in SECTIONS)  # 'II. 사업의 내용' 소제목을 몇 개 찾았나
         number_rows.append({**meta, "n_sections": n_part2, **rnd_capex(sections)})
     return pd.DataFrame(section_rows), pd.DataFrame(number_rows)

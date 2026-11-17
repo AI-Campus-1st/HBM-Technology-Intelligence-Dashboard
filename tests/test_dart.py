@@ -305,6 +305,81 @@ def test_sample_main_does_not_overwrite_labels(tmp_path):
     assert path.read_text(encoding="utf-8") == "labels"
 
 
+# ── 정기보고서 섹션 추출 (Day 3) ──
+
+# 실제 정기보고서 텍스트와 같은 모양: 목차 → 본문, 3번 안의 '4. 투자계획(현황)', 표는 한 칸씩 줄바꿈
+REPORT_TEXT = "\n".join([
+    "I. 회사의 개요", "II. 사업의 내용", "1. 사업의 개요", "6. 주요계약 및 연구개발활동", "III. 재무에 관한 사항",  # 목차
+    "I. 회사의 개요", "본문 회사 개요",
+    "II. 사업의 내용",
+    "1. 사업의 개요", "당사는 메모리 반도체를 만든다.",
+    "2. 주요 제품 및 서비스", "HBM3E 12단 양산",
+    "3. 원재료 및 생산설비", "가. 주요 원재료", "4. 투자계획(현황)", "(단위: 십억원)", "구분", "보완투자 등",
+    "2025.01.01~2025.12.31", "30,173", "누적실적", "합 계", "30,173", "-",
+    "4. 매출 및 수주상황", "매출 표",
+    "5. 위험관리 및 파생거래", "환율",
+    "6. 주요계약 및 연구개발활동", "가. 주요 계약", "나. 연구개발활동", "2. 연구개발비용", "(단위: 백만원)",
+    "연구개발비용 합계", "6,732,527", "4,954,447", "-",
+    "연구개발비 / 매출액 비율[연구개발비용계÷당기매출액×100]", "6.9%", "7.5%",
+    "다. 연구개발 실적", "HBM4 개발 완료", "고대역폭 메모리",
+    "7. 기타 참고사항", "업계의 현황",
+    "III. 재무에 관한 사항", "1. 요약재무정보", "HBM 매출",
+    "XII. 상세표", "3. 타법인출자 현황(상세)", "출자 표",
+    "4. 연구개발실적(상세)", "☞ 본문 위치로 이동", "DS 부문", "HBM3E 개발",
+    "【 전문가의 확인 】", "1. 전문가의 확인", "해당 없음",
+])
+
+SAMSUNG_FACILITY = "\n".join([
+    "(시설투자 현황) 2023년 중 DS 부문 및 SDC 등의 투자", "(단위 : 억원)", "구 분", "투자액",
+    "DS 부문", "신ㆍ증설, 보완 등", "2023.01~2023.12", "건물ㆍ설비 등", "483,723",
+    "SDC", "신ㆍ증설, 보완 등", "2023.01~2023.12", "건물ㆍ설비 등", "23,856",
+    "합 계", "531,139",
+])
+
+
+def test_split_sections_skips_toc_and_inner_numbering():
+    s = parse_documents.split_sections(REPORT_TEXT)
+    assert list(s)[:7] == [title for _, title, _ in parse_documents.SECTIONS]
+    assert s["사업의 개요"] == "당사는 메모리 반도체를 만든다."  # 목차가 아니라 본문
+    assert "4. 투자계획(현황)" in s["원재료 및 생산설비"]  # 3번 안의 '4.'에서 자르지 않는다
+    assert s["매출 및 수주상황"] == "매출 표"
+    assert s["기타 참고사항"] == "업계의 현황"  # III 앞에서 끝난다
+    assert s[parse_documents.DETAIL_RND] == "DS 부문\nHBM3E 개발\n【 전문가의 확인 】"
+
+
+def test_split_sections_without_part2_is_empty():
+    assert parse_documents.split_sections("주요사항보고서\n신규시설투자") == {}
+
+
+def test_rnd_capex_reads_current_period():
+    sk = parse_documents.rnd_capex(parse_documents.split_sections(REPORT_TEXT))
+    assert sk == {"rnd_expense_mil_krw": 6732527.0, "rnd_to_sales_pct": 6.9,
+                  "capex_100m_krw": 301730.0, "capex_ds_100m_krw": None}  # 십억원 → 억원
+    samsung = parse_documents.rnd_capex({"원재료 및 생산설비": SAMSUNG_FACILITY})
+    assert (samsung["capex_100m_krw"], samsung["capex_ds_100m_krw"]) == (531139.0, 483723.0)
+    assert samsung["rnd_expense_mil_krw"] is None  # 없으면 None
+
+
+def test_sections_main_writes_only_tagged_sections(tmp_path, section_outputs):
+    conn = db.connect(db.init_db(tmp_path / "t.db"))
+    base = {"corp_code": "00164779", "corp_name": "SK하이닉스", "url": "u", "text_status": "확보"}
+    db.write_table(conn, "disclosure", [
+        {**base, "rcept_no": "a1", "pblntf_ty": "A", "report_nm": "사업보고서 (2025.12)",
+         "rcept_dt": "2026-03-17", "text": REPORT_TEXT},
+        {**base, "rcept_no": "b1", "pblntf_ty": "B", "report_nm": "주요사항보고서", "rcept_dt": "2026-01-01",
+         "text": REPORT_TEXT},  # 정기보고서가 아니면 섹션을 뽑지 않는다
+    ])
+    conn.close()
+    sections, numbers = parse_documents.sections_main(db_path=tmp_path / "t.db")
+    assert set(sections["rcept_no"]) == {"a1"} and len(numbers) == 1
+    assert "매출 및 수주상황" not in set(sections["section"])
+    by = sections.set_index("section")
+    assert by.loc["주요계약 및 연구개발활동", "section_type"] == "연구개발"
+    assert by.loc["주요계약 및 연구개발활동", "hbm_count"] == 2  # HBM + 고대역폭
+    assert numbers.iloc[0]["period"] == "2025.12" and numbers.iloc[0]["n_sections"] == 7
+    assert (section_outputs / "sections_path.csv").exists()
+
+
 # ── news_link (HBM 기사 ↔ 공시 연결, 새 RAG 기준) ──
 
 from src.dart import news_link
@@ -385,4 +460,42 @@ def test_hbm_articles_falls_back_to_tagging_when_news_tag_empty(tmp_path):
     art, source = news_link.hbm_articles(conn)
     conn.close()
     assert art["news_id"].tolist() == ["n1"] and art.loc[0, "companies"] == ("SK하이닉스",)
+    assert art.loc[0, "primary_companies"] == ("SK하이닉스",)
     assert "즉석 계산" in source
+
+
+@pytest.mark.parametrize("rows, expected", [
+    ([], ()),
+    ([("삼성전자", 0, 3)], ("삼성전자",)),                                   # 한 기업뿐
+    ([("SK하이닉스", 1, 2), ("삼성전자", 0, 9)], ("SK하이닉스",)),           # 제목에 한 기업만
+    ([("SK하이닉스", 1, 2), ("삼성전자", 1, 9)], ("SK하이닉스", "삼성전자")),  # 둘 다 제목 → 비교 기사
+    ([("SK하이닉스", 0, 6), ("삼성전자", 0, 3)], ("SK하이닉스",)),           # 제목에 없고 본문 2배 이상
+    ([("SK하이닉스", 0, 5), ("삼성전자", 0, 3)], ("SK하이닉스", "삼성전자")),  # 2배 미만 → 둘 다
+])
+def test_primary_companies(rows, expected):
+    assert news_link.primary_companies(rows) == expected  # 두 기업이면 정렬된 순서 (SK하이닉스, 삼성전자)
+
+
+def test_link_uses_primary_company_and_seven_day_window():
+    articles, disclosures = make_link_inputs()
+    # 두 기업을 언급했지만 주 대상은 SK하이닉스 → 삼성전자 공시(i3)와는 연결하지 않는다
+    articles.loc[0, "companies"] = ("SK하이닉스", "삼성전자")
+    articles["primary_companies"] = [("SK하이닉스",), ("삼성전자",)]
+    links = news_link.link(articles, disclosures)
+    assert set(links["rcept_no"]) == {"i1", "i4"}
+    late = disclosures.assign(rcept_dt=disclosures["rcept_dt"].where(disclosures["rcept_no"] != "i1", "2024-04-28"))
+    assert "i1" not in set(news_link.link(articles, late)["rcept_no"])  # 8일 차이 → 기본 ±7일 밖
+
+
+def test_earnings_only_links_do_not_select_rag():
+    articles, disclosures = make_link_inputs()
+    earnings = {"corp_code": "x", "url": "u", "text_status": "확보", "rag_target": 1, "rcept_no": "e1",
+                "corp_name": "SK하이닉스", "report_nm": "연결재무제표기준영업(잠정)실적(공정공시)",
+                "rcept_dt": "2024-04-25", "pblntf_ty": "I", "text": "매출액 영업이익"}
+    disclosures = pd.concat([disclosures, pd.DataFrame([earnings])], ignore_index=True)
+    articles.loc[0, "title"] += " 실적 영업이익"
+    links = news_link.link(articles, disclosures)
+    assert "e1" in set(links["rcept_no"])                      # 근거 카드 후보에는 남는다
+    res = news_link.new_rag_target(disclosures, links).set_index("rcept_no")
+    assert res.loc["e1", "new_rag_target"] == 0 and res.loc["e1", "link_excluded_only"]
+    assert res.loc["i1", "new_rag_target"] == 1
