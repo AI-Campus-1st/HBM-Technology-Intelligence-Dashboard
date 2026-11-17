@@ -134,3 +134,5 @@ def test_main_writes_db_and_review_file_reproducibly(tmp_path):
     conn.close()
     assert rows["verified"].tolist() == [1, 0]
     assert pd.read_csv(review_path, dtype=str, keep_default_na=False)["verified"].tolist() == ["1", ""]
+    assert ie.clear(path) == 2
+    assert review_path.exists()  # 라벨 파일은 그대로

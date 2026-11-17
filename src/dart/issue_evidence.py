@@ -22,11 +22,13 @@
 
 DB 반영: issue_evidence를 통째로 다시 쓴다 (replace). evidence_id는 정렬 순서로 1부터 매긴다 →
     같은 코드·입력·라벨이면 두 사람 DB의 --check 지문이 같다.
-    spike_detection은 issue_evidence가 참조하는 issues 행을 지우지 않는다. 급증 기준이 바뀌면 이 모듈을 먼저 다시 돌린다.
+    spike_detection은 issue_evidence가 참조하는 issues 행을 지우지 않고 멈춘다. 급증 기준이 바뀌면
+    --clear로 issue_evidence를 비운 뒤 spike_detection → issue_evidence 순서로 다시 돌린다 (사람 확인은 라벨 파일에 남는다).
 
 실행: python -m src.dart.issue_evidence             (spike_detection·news_link 다음)
       python -m src.dart.issue_evidence --scope core
       python -m src.dart.issue_evidence --dry-run   (DB·라벨 파일은 그대로, 후보 CSV만)
+      python -m src.dart.issue_evidence --clear     (issue_evidence만 비운다. 급증 기준 변경 전)
 저장: outputs/reports/issue_evidence_candidates.csv (검토용: 공시명·제출일·링크·대표 기사 제목)
 
 담당: 공동 (공시 근거 부분 한도윤)
@@ -228,6 +230,16 @@ def with_context(review: pd.DataFrame, table: pd.DataFrame) -> pd.DataFrame:
     return merged[KEY + CONTEXT_COLUMNS + ["verified", "note", "reviewer"]]
 
 
+def clear(db_path: Path = config.DB_PATH) -> int:
+    """issue_evidence를 비운다 (라벨 파일은 그대로). 지운 행 수를 돌려준다."""
+    conn = db.connect(db_path)
+    try:
+        with conn:
+            return conn.execute("DELETE FROM issue_evidence").rowcount
+    finally:
+        conn.close()
+
+
 def main(scope: str = DEFAULT_SCOPE, dry_run: bool = False, db_path: Path = config.DB_PATH,
          review_path: Path = REVIEW_PATH, candidates_path: Path = CANDIDATES_PATH) -> pd.DataFrame:
     conn = db.connect(db_path)
@@ -265,5 +277,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="급증 구간별 근거 공시 후보 → issue_evidence")
     parser.add_argument("--scope", choices=SCOPES, default=DEFAULT_SCOPE, help="키워드 후보 범위 (기본 broad)")
     parser.add_argument("--dry-run", action="store_true", help="DB·라벨 파일을 바꾸지 않고 후보 CSV만 저장")
+    parser.add_argument("--clear", action="store_true", help="issue_evidence만 비운다 (급증 기준을 바꾸기 전)")
     args = parser.parse_args()
-    main(scope=args.scope, dry_run=args.dry_run)
+    if args.clear:
+        print(f"issue_evidence {clear()}행 삭제 (라벨 파일은 그대로). 다음: spike_detection → issue_evidence")
+    else:
+        main(scope=args.scope, dry_run=args.dry_run)

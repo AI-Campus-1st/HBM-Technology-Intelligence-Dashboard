@@ -89,7 +89,7 @@ copy .env.example .env
 | 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
 | 7-2 | `python -m src.dart.sql_report` | 한도윤 | 공시 SQL 집계 `sql/05_*.sql` 실행 (7·6-1 `--apply` 다음. `outputs/reports/sql05_*.csv`) |
 | 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 (방식 B `rolling6m_2sigma_exclude_spikes_min10_v1` → `issues`, 미리보기 `--dry-run`, 비교 `--method-a`) |
-| 8-1 | `python -m src.dart.issue_evidence` | 공동 | 급증 구간별 근거 공시 후보 → `issue_evidence` (8·6-1 다음. 사람 확인은 `data/labels/issue_evidence_review_v1.csv`의 `verified`를 채우고 다시 실행) |
+| 8-1 | `python -m src.dart.issue_evidence` | 공동 | 급증 구간별 근거 공시 후보 → `issue_evidence` (8·6-1 다음. 사람 확인은 `data/labels/issue_evidence_review_v1.csv`의 `verified`를 채우고 다시 실행. 급증 기준을 바꿀 때는 `--clear` → 8 → 8-1) |
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
 | 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB |
 | 11 | `streamlit run dashboard/app.py` | 공동 | 대시보드 실행 |
