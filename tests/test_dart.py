@@ -216,8 +216,15 @@ def test_parse_one_marks_failures(tmp_path):
     assert parse_documents.parse_one("short", "A", tmp_path)["filter_reason"] == "본문없음"
 
 
-def test_parse_main_updates_db_and_is_repeatable(tmp_path, monkeypatch):
-    monkeypatch.setattr(parse_documents, "SUMMARY_PATH", tmp_path / "summary.csv")
+@pytest.fixture
+def section_outputs(tmp_path, monkeypatch):
+    """섹션 추출 결과를 실제 data/·outputs/ 대신 임시 폴더에 쓴다."""
+    for name in ("SUMMARY_PATH", "SECTIONS_PATH", "SECTION_SUMMARY_PATH", "RND_CAPEX_PATH"):
+        monkeypatch.setattr(parse_documents, name, tmp_path / "out" / f"{name.lower()}.csv")
+    return tmp_path / "out"
+
+
+def test_parse_main_updates_db_and_is_repeatable(tmp_path, section_outputs):
     doc_dir = tmp_path / "docs"
     write_zip(doc_dir, "a1", DART_XML)
     conn = db.connect(db.init_db(tmp_path / "t.db"))
