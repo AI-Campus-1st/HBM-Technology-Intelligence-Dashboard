@@ -74,9 +74,9 @@ HBM 비중 급증 구간 (월 단위). Day 3에 생성해 한도윤에게 전달
 | end_date | DATE | NOT NULL | 구간 마지막 달의 말일 |
 | peak_date | DATE | NOT NULL | 비중 최고 달의 1일 |
 | peak_share | REAL | NOT NULL | 구간 내 최대 월별 비중 (0~1) |
-| baseline_share | REAL | | 직전 6개월 평균 비중 (0~1) |
+| baseline_share | REAL | | 최고 비중 달의 기준선 평균 비중 (직전 6개월, 급증 달 제외, 0~1) |
 | article_count | INTEGER | NOT NULL | 구간 내 관련 기사 수 (중복 제외) |
-| method | TEXT | NOT NULL | 탐지 기준·버전 (예: rolling6m_2sigma_v1) |
+| method | TEXT | NOT NULL | 탐지 기준·버전 (예: rolling6m_2sigma_exclude_spikes_min10_v1) |
 | summary | TEXT | | 사건 요약 (검토 후 작성) |
 
 ## disclosure (담당 한도윤)
