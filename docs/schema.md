@@ -95,7 +95,7 @@ DART 공시 한 건당 한 행. `collect_list`가 목록을 넣고(`text_status=
 | url | TEXT | NOT NULL | 원문 링크 |
 | text | TEXT | | 추출 본문 (확보 전·대상 아님·실패면 NULL) |
 | text_status | TEXT | NOT NULL, 기본 `대기`, `대기` / `확보` / `대상아님` / `실패` | 원문 확보 상태 |
-| rag_target | INTEGER | NOT NULL, 기본 0, 0/1 | RAG 사용 여부 (J는 본문 키워드가 있을 때만 1) |
+| rag_target | INTEGER | NOT NULL, 기본 0, 0/1 | RAG 사용 여부 (news_link link_v2가 정함: A 정기공시 + 본문 HBM 언급 + 실적 외 주제로 HBM 기사와 연결된 공시). `parse_documents`는 Day 2 유형 필터로 채우고, `news_link --apply`가 덮어쓴다 |
 | filter_reason | TEXT | | 대상아님·실패·RAG 제외 사유 (예: `I_공시명`, `J_본문키워드없음`, `다운로드오류`) |
 
 - 원문 확보율 = `text_status='확보'` 건수 / (`확보` + `실패`) 건수. `대상아님`은 분모에서 뺀다.
@@ -104,6 +104,7 @@ DART 공시 한 건당 한 행. `collect_list`가 목록을 넣고(`text_status=
 ## issue_evidence (공동, P1)
 
 급증 구간과 기사·공시의 연결. 자동 연결은 **후보**이며, 사람이 확인한 행만 `verified = 1`로 표시한다.
+`src/dart/issue_evidence.py`가 테이블 전체를 다시 쓴다. 사람 확인 결과는 git의 `data/labels/issue_evidence_review_v1.csv`에서 읽고, `evidence_id`는 정렬 순서로 매긴다. 그래서 두 사람의 DB가 같다 (판정 기준: `data/labels/README.md`).
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|

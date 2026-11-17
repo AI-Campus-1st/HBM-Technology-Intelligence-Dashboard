@@ -143,7 +143,7 @@ TABLES: dict[str, Table] = {
                 Column("url", "TEXT", "원문 링크", not_null=True),
                 Column("text", "TEXT", "추출 본문 (확보 전·대상 아님·실패면 NULL)"),
                 Column("text_status", "TEXT", "원문 확보 상태", not_null=True, allowed=TEXT_STATUSES, default="'대기'"),
-                Column("rag_target", "INTEGER", "RAG 사용 여부 (J는 본문 키워드가 있을 때만 1)", not_null=True, allowed=BOOL, default="0"),
+                Column("rag_target", "INTEGER", "RAG 사용 여부 (news_link link_v2가 정함: A 정기공시 + 본문 HBM 언급 + 실적 외 주제로 HBM 기사와 연결된 공시)", not_null=True, allowed=BOOL, default="0"),
                 Column("filter_reason", "TEXT", "대상아님·실패·RAG 제외 사유 (예: I_공시명, J_본문키워드없음, 다운로드오류)"),
             ),
             primary_key=("rcept_no",),
