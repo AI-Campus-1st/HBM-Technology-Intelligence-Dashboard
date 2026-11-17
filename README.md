@@ -84,7 +84,7 @@ copy .env.example .env
 | 5 | `python -m src.dart.collect_documents` | 한도윤 | 공시 원문 파일 |
 | 6 | `python -m src.dart.parse_documents` | 한도윤 | 공시 텍스트 DB 적재 |
 | 6-1 | `python -m src.dart.news_link` | 한도윤 | HBM 기사↔공시 연결 후보, 새 RAG 기준 미리보기 (`--apply`는 김한승과 기준 합의 후) |
-| 7 | `python -m src.news.preprocess` | 김한승 | 정제·중복 제거된 뉴스 |
+| 7 | `python -m src.news.preprocess` | 김한승 | 제목 중복(재배포) 표시, `news_tag` 적재 (2 다음. 6-1 `news_link`는 7 다음에 다시 실행하면 실제 태그·중복 제외를 반영) |
 | 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
 | 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 |
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
