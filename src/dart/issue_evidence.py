@@ -53,7 +53,7 @@ DEFAULT_SCOPE = "broad"
 # broad 범위에서 '관련' 기사로만 연결돼도 후보로 두는 공시 성격 (기사 사실을 회사가 직접 밝힌 공시)
 BROAD_CATEGORIES = frozenset({"풍문·해명", "투자·설비", "사업계획"})
 # J 계열사 거래는 분기마다 FAB 건설 거래가 들어 있어 시점만 맞아도 연결된다 (2026-11-17 확인: 대부분 우연)
-J_HINT = "계열사 거래 — 우연 연결 가능, 원문 확인"
+J_HINT = "계열사 거래 - 우연 연결 가능, 원문 확인"
 
 REVIEW_PATH = config.DATA_DIR / "labels" / "issue_evidence_review_v1.csv"
 CANDIDATES_PATH = config.OUTPUTS_DIR / "reports" / "issue_evidence_candidates.csv"
