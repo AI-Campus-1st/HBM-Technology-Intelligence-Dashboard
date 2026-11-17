@@ -89,6 +89,7 @@ copy .env.example .env
 | 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
 | 7-2 | `python -m src.dart.sql_report` | 한도윤 | 공시 SQL 집계 `sql/05_*.sql` 실행 (7·6-1 `--apply` 다음. `outputs/reports/sql05_*.csv`) |
 | 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 (방식 B `rolling6m_2sigma_exclude_spikes_min10_v1` → `issues`, 미리보기 `--dry-run`, 비교 `--method-a`) |
+| 8-1 | `python -m src.eda.news_sql_report` | 김한승 | 뉴스 SQL 집계 `sql/01~03_*.sql` 실행 (8 다음 — 03이 `issues`를 읽음. `outputs/reports/sql01~03_*.csv`) |
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
 | 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB |
 | 11 | `streamlit run dashboard/app.py` | 공동 | 대시보드 실행 |
@@ -213,6 +214,9 @@ mid_project/
 
 | 파일 | 담당 | 목적 |
 |---|---|---|
+| `01_news_monthly_dedup.sql` | 김한승 | 월별 수집·중복(재배포)·중복 제외 기사 수와 중복률 (재귀 CTE로 0건 달 채움). 분석 분모의 근거. |
+| `02_hbm_monthly_share.sql` | 김한승 | 월별 HBM 기사 수·비중, 전월 대비 변화(`LAG`)·3개월 이동평균·비중 순위(`RANK`). `news_trend.monthly_hbm`과 같은 값인지 테스트로 대조. |
+| `03_issue_company_coverage.sql` | 김한승 | 급증 구간(`issues`)별 HBM 기사의 SK하이닉스·삼성전자 점유 vs 구간 밖 (JOIN·기간 비교). |
 | `05_1_disclosure_events_vs_hbm_news.sql` | 한도윤 | 기업·월별 사건성 공시 건수와 HBM 기사 수를 같은 월 축에 (재귀 CTE로 0건 달 채움). 급증 구간의 근거 공시 후보 찾기. |
 | `05_2_disclosure_category_yoy.sql` | 한도윤 | 기업·공시 성격별 12개월 구간(Y1~Y3) 건수, 직전 구간 대비 증감(`LAG`), 원문 확보·RAG 대상 건수. |
 
@@ -220,7 +224,8 @@ mid_project/
 
 | 파일 | 담당 | 목적 |
 |---|---|---|
-| `news_trend.py` | 김한승 | 키워드·기업·일자별 기사량, 무관 기사 비중. |
+| `news_trend.py` | 김한승 | 월별 기사량·HBM 비중·기업 점유, 카테고리별 무관 기사 비중. |
+| `news_sql_report.py` | 김한승 | `sql/01~03_*.sql` 뉴스 집계 쿼리 실행 → `outputs/reports/sql01~03_*.csv` (실행 함수는 `src/dart/sql_report.py` 재사용). |
 | `disclosure_trend.py` | 한도윤 | 기업 × 유형 × 월 공시 건수, 공시 성격(투자·실적·풍문 등) 분류, 사건성 공시 타임라인. 필터 인자를 받아 대시보드에서 재사용. |
 | `spike_detection.py` | 공동 | 이슈 급증 시점 탐지 및 저장. |
 
