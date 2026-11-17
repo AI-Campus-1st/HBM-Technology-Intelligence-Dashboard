@@ -85,7 +85,7 @@ copy .env.example .env
 | 6 | `python -m src.dart.parse_documents` | 한도윤 | 공시 텍스트 DB 적재 + 정기보고서 R&D·투자 섹션 추출 (`--sections`면 섹션만 다시: `data/processed/disclosure_sections.csv`, `outputs/reports/disclosure_section_summary.csv`·`disclosure_rnd_capex.csv`) |
 | 6-1 | `python -m src.dart.news_link` | 한도윤 | HBM 기사↔공시 연결 후보, 새 RAG 기준 미리보기 (`--apply`는 김한승과 기준 합의 후) |
 | 6-2 | `python -m src.rag.chunking` | 한도윤 | RAG 대상 공시 청크 (6-1 `--apply` 다음. `data/processed/disclosure_chunks.jsonl`, 요약 `outputs/reports/disclosure_chunk_summary.csv`) |
-| 7 | `python -m src.news.preprocess` | 김한승 | 정제·중복 제거된 뉴스 |
+| 7 | `python -m src.news.preprocess` | 김한승 | 제목 중복(재배포) 표시, `news_tag` 적재 (2 다음. 7을 처음 돌리거나 다시 돌렸으면 6-1 `news_link --apply` → 6-2 `chunking`을 다시 실행해 실제 태그·중복 제외를 반영) |
 | 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
 | 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 |
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
