@@ -88,7 +88,7 @@ copy .env.example .env
 | 7 | `python -m src.news.preprocess` | 김한승 | 제목 중복(재배포) 표시, `news_tag` 적재 (2 다음. 7을 처음 돌리거나 다시 돌렸으면 6-1 `news_link --apply` → 6-2 `chunking`을 다시 실행해 실제 태그·중복 제외를 반영) |
 | 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
 | 7-2 | `python -m src.dart.sql_report` | 한도윤 | 공시 SQL 집계 `sql/05_*.sql` 실행 (7·6-1 `--apply` 다음. `outputs/reports/sql05_*.csv`) |
-| 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 |
+| 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 (방식 B `rolling6m_2sigma_exclude_spikes_min10_v1` → `issues`, 미리보기 `--dry-run`, 비교 `--method-a`) |
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
 | 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB |
 | 11 | `streamlit run dashboard/app.py` | 공동 | 대시보드 실행 |
