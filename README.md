@@ -203,7 +203,7 @@ mid_project/
 | `collect_documents.py` | Day 2 | 공시서류원본파일 API로 원문 다운로드. |
 | `parse_documents.py` | Day 2 | 원문에서 텍스트를 추출해 DB에 적재. |
 | `relevance_review.py` | Day 2~3 | 공시 관련성 표본 검수 (sample → 라벨 → score). |
-| `news_link.py` | Day 3 | HBM 기사와 공시 연결(기업·±30일·주제) → `issue_evidence` 후보, RAG 대상 재선정(A 정기공시 + HBM 언급 + 뉴스 연결). |
+| `news_link.py` | Day 3 | HBM 기사와 공시 연결(`link_v2`: 주 대상 기업·±7일·주제) → `issue_evidence` 후보, RAG 대상 재선정(A 정기공시 + HBM 언급 + 뉴스 연결, 실적 주제만으로 연결된 공시는 제외). |
 
 ### `src/eda/` — EDA
 

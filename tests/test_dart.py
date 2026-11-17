@@ -385,4 +385,42 @@ def test_hbm_articles_falls_back_to_tagging_when_news_tag_empty(tmp_path):
     art, source = news_link.hbm_articles(conn)
     conn.close()
     assert art["news_id"].tolist() == ["n1"] and art.loc[0, "companies"] == ("SK하이닉스",)
+    assert art.loc[0, "primary_companies"] == ("SK하이닉스",)
     assert "즉석 계산" in source
+
+
+@pytest.mark.parametrize("rows, expected", [
+    ([], ()),
+    ([("삼성전자", 0, 3)], ("삼성전자",)),                                   # 한 기업뿐
+    ([("SK하이닉스", 1, 2), ("삼성전자", 0, 9)], ("SK하이닉스",)),           # 제목에 한 기업만
+    ([("SK하이닉스", 1, 2), ("삼성전자", 1, 9)], ("SK하이닉스", "삼성전자")),  # 둘 다 제목 → 비교 기사
+    ([("SK하이닉스", 0, 6), ("삼성전자", 0, 3)], ("SK하이닉스",)),           # 제목에 없고 본문 2배 이상
+    ([("SK하이닉스", 0, 5), ("삼성전자", 0, 3)], ("SK하이닉스", "삼성전자")),  # 2배 미만 → 둘 다
+])
+def test_primary_companies(rows, expected):
+    assert news_link.primary_companies(rows) == expected  # 두 기업이면 정렬된 순서 (SK하이닉스, 삼성전자)
+
+
+def test_link_uses_primary_company_and_seven_day_window():
+    articles, disclosures = make_link_inputs()
+    # 두 기업을 언급했지만 주 대상은 SK하이닉스 → 삼성전자 공시(i3)와는 연결하지 않는다
+    articles.loc[0, "companies"] = ("SK하이닉스", "삼성전자")
+    articles["primary_companies"] = [("SK하이닉스",), ("삼성전자",)]
+    links = news_link.link(articles, disclosures)
+    assert set(links["rcept_no"]) == {"i1", "i4"}
+    late = disclosures.assign(rcept_dt=disclosures["rcept_dt"].where(disclosures["rcept_no"] != "i1", "2024-04-28"))
+    assert "i1" not in set(news_link.link(articles, late)["rcept_no"])  # 8일 차이 → 기본 ±7일 밖
+
+
+def test_earnings_only_links_do_not_select_rag():
+    articles, disclosures = make_link_inputs()
+    earnings = {"corp_code": "x", "url": "u", "text_status": "확보", "rag_target": 1, "rcept_no": "e1",
+                "corp_name": "SK하이닉스", "report_nm": "연결재무제표기준영업(잠정)실적(공정공시)",
+                "rcept_dt": "2024-04-25", "pblntf_ty": "I", "text": "매출액 영업이익"}
+    disclosures = pd.concat([disclosures, pd.DataFrame([earnings])], ignore_index=True)
+    articles.loc[0, "title"] += " 실적 영업이익"
+    links = news_link.link(articles, disclosures)
+    assert "e1" in set(links["rcept_no"])                      # 근거 카드 후보에는 남는다
+    res = news_link.new_rag_target(disclosures, links).set_index("rcept_no")
+    assert res.loc["e1", "new_rag_target"] == 0 and res.loc["e1", "link_excluded_only"]
+    assert res.loc["i1", "new_rag_target"] == 1
