@@ -4,13 +4,20 @@ HBM 기사와 공시를 연결하고, 그 결과로 RAG 대상 공시(disclosure
 방향 (2026-11-16 논의): "뉴스에서 이슈 발견 → 공시로 근거 확인" 흐름에 맞춰, RAG에는 다음 공시만 남긴다.
     (1) A 정기공시 — 뉴스에 없는 신호도 담고 있어 항상 남긴다
     (2) 본문에 'HBM'이 나오는 공시
-    (3) HBM 기사와 연결되는 공시 = 기사의 사실을 확인(fact check)할 수 있는 공시
+    (3) HBM 기사와 연결되는 공시 = 기사의 사실을 확인(fact check)할 수 있는 공시.
+        단 '실적' 주제로만 연결된 공시는 RAG 선정에 쓰지 않는다 (RAG_EXCLUDE_TOPICS). 잠정실적은 분기마다
+        반복돼 거의 모든 기사와 연결되고, 실적 공시는 계절성이라 급증 근거로 쓰지 않기로 했다 (리포트 3.2).
+        이 연결은 근거 카드(issue_evidence) 후보에는 그대로 남긴다.
 원문이 없는 공시(대상아님·실패)는 연결되더라도 RAG에 넣을 수 없으므로 '원문 필요'로 따로 보고한다.
 
 연결 규칙 (LINK_VERSION, 김한승과 확정 전 초안):
-    - 같은 기업: 기사의 기업 태그(SK하이닉스·삼성전자)와 공시 corp_name이 같다
-    - 가까운 시점: 공시 제출일이 기사 발행일 ±WINDOW_DAYS일 안
+    - 같은 기업: 기사의 '주 대상 기업'(primary_companies)과 공시 corp_name이 같다.
+      두 회사를 모두 언급한 기사(연결 기사의 약 60%)가 양쪽 공시에 다 붙지 않도록, news_tag의 제목 포함·본문
+      언급 수로 주 대상을 정한다: 제목에 한 회사만 → 그 회사 / 제목에 없으면 본문 언급이 2배 이상인 회사 /
+      그 밖(둘 다 제목, 비슷한 언급 수 = 비교 기사)은 두 회사 모두
+    - 가까운 시점: 공시 제출일이 기사 발행일 ±WINDOW_DAYS(7)일 안 (link_v1의 ±30일은 분기 공시가 거의 다 걸림)
     - 같은 주제: TOPICS의 주제 하나에 대해 기사 패턴과 공시 패턴이 모두 맞는다
+link_v1 → link_v2 (2026-11-17, 한도윤 제안·김한승 합의 대기): ±30일 → ±7일, 주 대상 기업, 실적 연결은 RAG 선정 제외
 HBM 기사: news_tag에서 HBM 핵심·관련, 중복 아닌 기사. news_tag가 비어 있으면(preprocess.py 전)
     tagging.tag_article()로 즉석에서 같은 기준을 계산한다 (news_tag에는 쓰지 않는다).
 
@@ -36,8 +43,10 @@ import pandas as pd
 from src.common import config, db
 from src.news import tagging
 
-LINK_VERSION = "link_v1"
-WINDOW_DAYS = 30
+LINK_VERSION = "link_v2"
+WINDOW_DAYS = 7
+RAG_EXCLUDE_TOPICS = frozenset({"실적"})  # 이 주제로만 연결된 공시는 RAG 대상 근거로 쓰지 않는다 (근거 카드 후보에는 남김)
+PRIMARY_DOMINANCE = 2  # 제목에 기업이 없을 때, 본문 언급이 상대의 이 배수 이상이면 주 대상
 HBM_RELEVANCE = ("핵심", "관련")  # 분석 대상 HBM 기사 (사람 검수 반영 추정 정밀도 0.83·재현율 0.85, 2026-11-16)
 
 LINKS_PATH = config.PROCESSED_DIR / "disclosure_news_links.csv"
@@ -82,12 +91,37 @@ def hbm_articles(conn) -> tuple[pd.DataFrame, str]:
         tags = pd.DataFrame(rows, columns=["news_id", "tag_type", "tag", "relevance", "in_title", "body_count", "rule_version"])
         source = f"tagging.tag_article 즉석 계산 ({tagging.RULE_VERSION}, news_tag 비어 있음)"
     hbm_ids = set(tags[(tags["tag"] == "HBM") & tags["relevance"].isin(HBM_RELEVANCE)]["news_id"])
-    companies = (
-        tags[tags["tag_type"] == "company"].groupby("news_id")["tag"].apply(lambda s: tuple(sorted(set(s))))
+    company_tags = tags[tags["tag_type"] == "company"]
+    companies = company_tags.groupby("news_id")["tag"].apply(lambda s: tuple(sorted(set(s))))
+    primary = company_tags.groupby("news_id").apply(
+        lambda g: primary_companies(zip(g["tag"], g["in_title"], g["body_count"])), include_groups=False
     )
     art = news[news["news_id"].isin(hbm_ids) & (news["is_duplicate"] == 0)].copy()
-    art["companies"] = art["news_id"].map(companies).apply(lambda v: v if isinstance(v, tuple) else ())
+    as_tuple = lambda v: v if isinstance(v, tuple) else ()  # noqa: E731 — 기업 태그가 없는 기사
+    art["companies"] = art["news_id"].map(companies).apply(as_tuple)
+    art["primary_companies"] = art["news_id"].map(primary).apply(as_tuple)
     return art.drop(columns="is_duplicate").reset_index(drop=True), source
+
+
+def primary_companies(company_rows) -> tuple[str, ...]:
+    """기사의 주 대상 기업. company_rows: (기업, 제목 포함 0/1, 본문 언급 수) 목록.
+
+    - 기업이 하나뿐이면 그 기업
+    - 제목에 한 기업만 나오면 그 기업
+    - 둘 다 제목에 없고, 한쪽 본문 언급이 다른 쪽의 PRIMARY_DOMINANCE배 이상이면 그 기업
+    - 그 밖(둘 다 제목, 비슷한 언급 수)은 비교 기사로 보고 모두
+    """
+    rows = [(tag, bool(in_title), int(count)) for tag, in_title, count in company_rows]
+    if len(rows) <= 1:
+        return tuple(tag for tag, _, _ in rows)
+    titled = [tag for tag, in_title, _ in rows if in_title]
+    if len(titled) == 1:
+        return (titled[0],)
+    if not titled:
+        (top, top_n), (_, second_n) = sorted(((t, n) for t, _, n in rows), key=lambda x: -x[1])[:2]
+        if top_n >= PRIMARY_DOMINANCE * second_n:
+            return (top,)
+    return tuple(sorted(tag for tag, _, _ in rows))
 
 
 def article_topics(text: str) -> set[str]:
@@ -126,10 +160,11 @@ def link(articles: pd.DataFrame, disclosures: pd.DataFrame, window_days: int = W
     for a in articles.itertuples(index=False):
         content = a.content if isinstance(a.content, str) else ""
         a_topics = article_topics(f"{a.title} {content}")
-        if not a_topics or not a.companies:
+        targets = getattr(a, "primary_companies", None) or a.companies  # 주 대상이 없으면(입력에 없을 때) 전체 기업
+        if not a_topics or not targets:
             continue
         pub = pd.Timestamp(a.published_at)
-        near = disc[(disc["corp_name"].isin(a.companies))
+        near = disc[(disc["corp_name"].isin(targets))
                     & (disc["dt"] >= pub - timedelta(days=window_days))
                     & (disc["dt"] <= pub + timedelta(days=window_days))]
         for d in near.itertuples(index=False):
@@ -147,11 +182,13 @@ def link(articles: pd.DataFrame, disclosures: pd.DataFrame, window_days: int = W
 def new_rag_target(disclosures: pd.DataFrame, links: pd.DataFrame) -> pd.DataFrame:
     """새 기준의 rag_target과 이유. 원문이 있는 공시만 RAG 대상이 될 수 있다."""
     df = disclosures.copy()
-    linked = set(links["rcept_no"])
+    rag_links = links[~links["topic"].isin(RAG_EXCLUDE_TOPICS)]
     has_text = df["text_status"] == "확보"
     df["by_A"] = df["pblntf_ty"] == "A"
     df["by_hbm"] = df["text"].fillna("").str.contains("HBM")
-    df["by_link"] = df["rcept_no"].isin(linked)
+    df["by_link"] = df["rcept_no"].isin(set(rag_links["rcept_no"]))
+    # 실적 주제로만 연결된 공시 (근거 카드 후보에는 있지만 RAG 근거로는 안 씀)
+    df["link_excluded_only"] = df["rcept_no"].isin(set(links["rcept_no"])) & ~df["by_link"]
     keep = df["by_A"] | df["by_hbm"] | df["by_link"]
     df["new_rag_target"] = (has_text & keep).astype(int)
     df["new_reason"] = None
@@ -169,6 +206,7 @@ def summarize(df: pd.DataFrame) -> pd.DataFrame:
         "근거_A": g["by_A"].sum(),
         "근거_HBM언급": g["by_hbm"].sum(),
         "근거_뉴스연결": g["by_link"].sum(),
+        "실적연결만_RAG제외": g["link_excluded_only"].sum(),
         "연결됐지만_원문없음": g["needs_text"].sum(),
     }).astype(int)
     out.loc["합계"] = out.sum()
