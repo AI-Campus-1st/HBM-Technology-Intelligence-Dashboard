@@ -83,6 +83,7 @@ copy .env.example .env
 | 4 | `python -m src.dart.collect_list` | 한도윤 | 공시 목록 (원본 저장) |
 | 5 | `python -m src.dart.collect_documents` | 한도윤 | 공시 원문 파일 |
 | 6 | `python -m src.dart.parse_documents` | 한도윤 | 공시 텍스트 DB 적재 + 정기보고서 R&D·투자 섹션 추출 (`--sections`면 섹션만 다시: `data/processed/disclosure_sections.csv`, `outputs/reports/disclosure_section_summary.csv`·`disclosure_rnd_capex.csv`) |
+| 6-1 | `python -m src.rag.chunking` | 한도윤 | RAG 대상 공시 청크 (`data/processed/disclosure_chunks.jsonl`, 요약 `outputs/reports/disclosure_chunk_summary.csv`) |
 | 7 | `python -m src.news.preprocess` | 김한승 | 정제·중복 제거된 뉴스 |
 | 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
 | 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 |
@@ -222,7 +223,7 @@ mid_project/
 
 | 파일 | 일정 | 목적 |
 |---|---|---|
-| `chunking.py` | Day 5 | 공시 텍스트를 청크로 나누고 공시명·제출일·링크 메타데이터를 붙인다. |
+| `chunking.py` | Day 3 | RAG 대상 공시를 청크(1,000자, 겹침 150자)로 나누고 공시명·제출일·링크·섹션 메타데이터를 붙인다. 정기보고서는 사업·제품·투자·연구개발 섹션만, 표는 행 단위로 묶어서 자른다. |
 | `build_index.py` | Day 5 | 임베딩 후 벡터 DB(`data/vectordb`)에 **미리 저장**. |
 | `qa_chain.py` | Day 5 | LangChain 질의응답. 근거 공시를 표시하고, 근거가 없으면 답변을 거절한다. |
 
