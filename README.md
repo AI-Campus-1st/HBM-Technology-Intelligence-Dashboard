@@ -82,7 +82,8 @@ copy .env.example .env
 | 3 | `python -m src.dart.corp_code` | 한도윤 | SK하이닉스·삼성전자 corp_code |
 | 4 | `python -m src.dart.collect_list` | 한도윤 | 공시 목록 (원본 저장) |
 | 5 | `python -m src.dart.collect_documents` | 한도윤 | 공시 원문 파일 |
-| 6 | `python -m src.dart.parse_documents` | 한도윤 | 공시 텍스트 DB 적재 + 정기보고서 R&D·투자 섹션 추출 (`--sections`면 섹션만 다시: `data/processed/disclosure_sections.csv`, `outputs/reports/disclosure_section_summary.csv`·`disclosure_rnd_capex.csv`) |
+| 6 | `python -m src.dart.parse_documents` | 한도윤 | 공시 텍스트 DB 적재 |
+| 6-1 | `python -m src.dart.news_link` | 한도윤 | HBM 기사↔공시 연결 후보, 새 RAG 기준 미리보기 (`--apply`는 김한승과 기준 합의 후) |
 | 7 | `python -m src.news.preprocess` | 김한승 | 정제·중복 제거된 뉴스 |
 | 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
 | 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 |
@@ -200,7 +201,9 @@ mid_project/
 | `corp_code.py` | Day 1 | `corpCode.xml`로 SK하이닉스·삼성전자 `corp_code` 확인. |
 | `collect_list.py` | Day 2 | `list.json` 공시 목록 수집 (기간 `20231019`~`20261019`, `config.DART_BGN_DE`~`DART_END_DE`). 요청 간 딜레이, 원본 저장, 재실행 시 이미 받은 건 건너뛰기. |
 | `collect_documents.py` | Day 2 | 공시서류원본파일 API로 원문 다운로드. |
-| `parse_documents.py` | Day 2~3 | 원문에서 텍스트를 추출해 DB에 적재. 정기보고서를 'II. 사업의 내용' 소제목(사업·제품·투자·연구개발)과 삼성전자 연구개발실적(상세)으로 나누고, R&D 비용·매출 대비 비율·시설투자액을 뽑는다. |
+| `parse_documents.py` | Day 2 | 원문에서 텍스트를 추출해 DB에 적재. |
+| `relevance_review.py` | Day 2~3 | 공시 관련성 표본 검수 (sample → 라벨 → score). |
+| `news_link.py` | Day 3 | HBM 기사와 공시 연결(기업·±30일·주제) → `issue_evidence` 후보, RAG 대상 재선정(A 정기공시 + HBM 언급 + 뉴스 연결). |
 
 ### `src/eda/` — EDA
 

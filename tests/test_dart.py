@@ -246,76 +246,143 @@ def test_parse_main_updates_db_and_is_repeatable(tmp_path, section_outputs):
     assert (total["확보"], total["대상아님"], total["대기"]) == (1, 1, 1)
 
 
-# ── 정기보고서 섹션 추출 (Day 3) ──
+# ── relevance_review (공시 관련성 표본 검수) ──
 
-# 실제 정기보고서 텍스트와 같은 모양: 목차 → 본문, 3번 안의 '4. 투자계획(현황)', 표는 한 칸씩 줄바꿈
-REPORT_TEXT = "\n".join([
-    "I. 회사의 개요", "II. 사업의 내용", "1. 사업의 개요", "6. 주요계약 및 연구개발활동", "III. 재무에 관한 사항",  # 목차
-    "I. 회사의 개요", "본문 회사 개요",
-    "II. 사업의 내용",
-    "1. 사업의 개요", "당사는 메모리 반도체를 만든다.",
-    "2. 주요 제품 및 서비스", "HBM3E 12단 양산",
-    "3. 원재료 및 생산설비", "가. 주요 원재료", "4. 투자계획(현황)", "(단위: 십억원)", "구분", "보완투자 등",
-    "2025.01.01~2025.12.31", "30,173", "누적실적", "합 계", "30,173", "-",
-    "4. 매출 및 수주상황", "매출 표",
-    "5. 위험관리 및 파생거래", "환율",
-    "6. 주요계약 및 연구개발활동", "가. 주요 계약", "나. 연구개발활동", "2. 연구개발비용", "(단위: 백만원)",
-    "연구개발비용 합계", "6,732,527", "4,954,447", "-",
-    "연구개발비 / 매출액 비율[연구개발비용계÷당기매출액×100]", "6.9%", "7.5%",
-    "다. 연구개발 실적", "HBM4 개발 완료", "고대역폭 메모리",
-    "7. 기타 참고사항", "업계의 현황",
-    "III. 재무에 관한 사항", "1. 요약재무정보", "HBM 매출",
-    "XII. 상세표", "3. 타법인출자 현황(상세)", "출자 표",
-    "4. 연구개발실적(상세)", "☞ 본문 위치로 이동", "DS 부문", "HBM3E 개발",
-    "【 전문가의 확인 】", "1. 전문가의 확인", "해당 없음",
+from src.dart import relevance_review
+
+
+def fake_disclosures():
+    rows = []
+    for i in range(30):
+        rows.append({"rcept_no": f"b{i:02d}", "corp_name": "SK하이닉스", "report_nm": "주요사항보고서(자기주식처분결정)",
+                     "rcept_dt": "2024-01-01", "pblntf_ty": "B", "url": "u", "text": "자기주식 처분 임직원 보상",
+                     "text_status": "확보", "rag_target": 1, "filter_reason": None})
+    rows.append({"rcept_no": "a01", "corp_name": "SK하이닉스", "report_nm": "사업보고서", "rcept_dt": "2024-03-01",
+                 "pblntf_ty": "A", "url": "u", "text": "당사는 HBM3E 양산을 시작했다. HBM 매출 증가",
+                 "text_status": "확보", "rag_target": 1, "filter_reason": None})
+    rows.append({"rcept_no": "i01", "corp_name": "삼성전자", "report_nm": "현금ㆍ현물배당결정", "rcept_dt": "2024-01-31",
+                 "pblntf_ty": "I", "url": "u", "text": None, "text_status": "대상아님", "rag_target": 0,
+                 "filter_reason": "I_공시명"})
+    return pd.DataFrame(rows)
+
+
+def test_build_sample_is_stratified_and_repeatable():
+    strata = {("A", "RAG대상"): None, ("B", "RAG대상"): 20, ("I", "제외"): 15}
+    s1 = relevance_review.build_sample(fake_disclosures(), strata)
+    s2 = relevance_review.build_sample(fake_disclosures().sample(frac=1, random_state=1), strata)
+    assert s1["rcept_no"].tolist() == s2["rcept_no"].tolist()  # 입력 순서가 달라도 같은 표본
+    counts = s1.groupby(["pblntf_ty", "stratum"]).size().to_dict()
+    assert counts == {("A", "RAG대상"): 1, ("B", "RAG대상"): 20, ("I", "제외"): 1}
+    a = s1[s1["rcept_no"] == "a01"].iloc[0]
+    assert a["hbm_count"] == 2 and "HBM3E" in a["context"]
+    assert "원문 미수집" in s1[s1["rcept_no"] == "i01"].iloc[0]["context"]
+    assert list(s1.columns) == relevance_review.REVIEW_COLUMNS
+
+
+def test_relevance_table_counts_levels():
+    labels = pd.DataFrame({
+        "pblntf_ty": ["A", "A", "B", "B", "B", "I"],
+        "stratum": ["RAG대상", "RAG대상", "RAG대상", "RAG대상", "RAG대상", "제외"],
+        "label": [2, 1, 0, 0, None, 1],
+    })
+    t = relevance_review.relevance_table(labels).set_index(["pblntf_ty", "stratum"])
+    assert t.loc[("A", "RAG대상"), "relevant_rate"] == 1.0
+    assert t.loc[("A", "RAG대상"), "n_direct"] == 1
+    assert t.loc[("B", "RAG대상"), "n_labeled"] == 2 and t.loc[("B", "RAG대상"), "relevant_rate"] == 0.0
+    assert t.loc[("I", "제외"), "meaning"] == "놓친 비율"
+
+
+def test_relevance_table_rejects_bad_label():
+    with pytest.raises(ValueError):
+        relevance_review.relevance_table(pd.DataFrame({"pblntf_ty": ["A"], "stratum": ["RAG대상"], "label": [3]}))
+
+
+def test_sample_main_does_not_overwrite_labels(tmp_path):
+    path = tmp_path / "review.csv"
+    path.write_text("labels", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        relevance_review.sample_main(path=path, db_path=tmp_path / "none.db")
+    assert path.read_text(encoding="utf-8") == "labels"
+
+
+# ── news_link (HBM 기사 ↔ 공시 연결, 새 RAG 기준) ──
+
+from src.dart import news_link
+
+
+@pytest.mark.parametrize("ty, name, text, expected", [
+    ("A", "사업보고서 (2024.12)", "공장 증설 실적 HBM", set()),          # 긴 문서는 연결하지 않음
+    ("D", "의결권대리행사권유참고서류", "공장 투자", set()),
+    ("J", "동일인등출자계열회사와의상품ㆍ용역거래변경", "FAB 건설 신규 FAB 구축 4,004,900", {"설비투자"}),
+    ("J", "동일인등출자계열회사와의상품ㆍ용역거래", "Wafer 구매 FAB 운영지원", set()),
+    ("J", "대규모기업집단현황공시[분기별공시(대표회사용)]", "건설 FAB 설계", set()),
+    ("I", "신규시설투자등", "청주 M15X 건설", {"설비투자"}),
+    ("I", "연결재무제표기준영업(잠정)실적(공정공시)", "매출액", {"실적"}),
+    ("I", "기타경영사항(자율공시)", "스마트공장 지원사업 대외후원금 출연", set()),
+    ("I", "풍문또는보도에대한해명(미확정)", "美 신규 어드밴스드 패키징 공장 건설 관련 보도", {"설비투자"}),
+    ("I", "풍문또는보도에대한해명(미확정)", "자사주 90조 매입 공장", set()),
+    ("B", "주요사항보고서(유상증자결정)", "자금조달의 목적 - 시설자금", {"설비투자"}),
+    ("B", "주요사항보고서(유상증자결정)", "운영자금", set()),
+    ("B", "주요사항보고서(자기주식처분결정)", "임직원 보상 공장", set()),
 ])
-
-SAMSUNG_FACILITY = "\n".join([
-    "(시설투자 현황) 2023년 중 DS 부문 및 SDC 등의 투자", "(단위 : 억원)", "구 분", "투자액",
-    "DS 부문", "신ㆍ증설, 보완 등", "2023.01~2023.12", "건물ㆍ설비 등", "483,723",
-    "SDC", "신ㆍ증설, 보완 등", "2023.01~2023.12", "건물ㆍ설비 등", "23,856",
-    "합 계", "531,139",
-])
+def test_disclosure_topics(ty, name, text, expected):
+    assert news_link.disclosure_topics(ty, name, text) == expected
 
 
-def test_split_sections_skips_toc_and_inner_numbering():
-    s = parse_documents.split_sections(REPORT_TEXT)
-    assert list(s)[:7] == [title for _, title, _ in parse_documents.SECTIONS]
-    assert s["사업의 개요"] == "당사는 메모리 반도체를 만든다."  # 목차가 아니라 본문
-    assert "4. 투자계획(현황)" in s["원재료 및 생산설비"]  # 3번 안의 '4.'에서 자르지 않는다
-    assert s["매출 및 수주상황"] == "매출 표"
-    assert s["기타 참고사항"] == "업계의 현황"  # III 앞에서 끝난다
-    assert s[parse_documents.DETAIL_RND] == "DS 부문\nHBM3E 개발\n【 전문가의 확인 】"
-
-
-def test_split_sections_without_part2_is_empty():
-    assert parse_documents.split_sections("주요사항보고서\n신규시설투자") == {}
-
-
-def test_rnd_capex_reads_current_period():
-    sk = parse_documents.rnd_capex(parse_documents.split_sections(REPORT_TEXT))
-    assert sk == {"rnd_expense_mil_krw": 6732527.0, "rnd_to_sales_pct": 6.9,
-                  "capex_100m_krw": 301730.0, "capex_ds_100m_krw": None}  # 십억원 → 억원
-    samsung = parse_documents.rnd_capex({"원재료 및 생산설비": SAMSUNG_FACILITY})
-    assert (samsung["capex_100m_krw"], samsung["capex_ds_100m_krw"]) == (531139.0, 483723.0)
-    assert samsung["rnd_expense_mil_krw"] is None  # 없으면 None
-
-
-def test_sections_main_writes_only_tagged_sections(tmp_path, section_outputs):
-    conn = db.connect(db.init_db(tmp_path / "t.db"))
-    base = {"corp_code": "00164779", "corp_name": "SK하이닉스", "url": "u", "text_status": "확보"}
-    db.write_table(conn, "disclosure", [
-        {**base, "rcept_no": "a1", "pblntf_ty": "A", "report_nm": "사업보고서 (2025.12)",
-         "rcept_dt": "2026-03-17", "text": REPORT_TEXT},
-        {**base, "rcept_no": "b1", "pblntf_ty": "B", "report_nm": "주요사항보고서", "rcept_dt": "2026-01-01",
-         "text": REPORT_TEXT},  # 정기보고서가 아니면 섹션을 뽑지 않는다
+def make_link_inputs():
+    articles = pd.DataFrame([
+        {"news_id": "n1", "published_at": "2024-04-20", "title": "SK하이닉스, 청주 M15X에 HBM 라인 증설",
+         "content": "HBM", "companies": ("SK하이닉스",)},
+        {"news_id": "n2", "published_at": "2024-04-20", "title": "삼성전자 HBM 엔비디아 퀄 테스트",
+         "content": None, "companies": ("삼성전자",)},
     ])
+    base = {"corp_code": "x", "url": "u", "text_status": "확보", "rag_target": 1}
+    disclosures = pd.DataFrame([
+        {**base, "rcept_no": "i1", "corp_name": "SK하이닉스", "report_nm": "신규시설투자등", "rcept_dt": "2024-04-24",
+         "pblntf_ty": "I", "text": "청주 M15X 건설"},
+        {**base, "rcept_no": "i2", "corp_name": "SK하이닉스", "report_nm": "신규시설투자등", "rcept_dt": "2024-07-01",
+         "pblntf_ty": "I", "text": "증설"},                                       # 날짜가 멀다
+        {**base, "rcept_no": "i3", "corp_name": "삼성전자", "report_nm": "신규시설투자등", "rcept_dt": "2024-04-24",
+         "pblntf_ty": "I", "text": "평택 증설"},                                  # n2는 설비투자 주제가 아님
+        {**base, "rcept_no": "b1", "corp_name": "SK하이닉스", "report_nm": "주요사항보고서(자기주식처분결정)",
+         "rcept_dt": "2024-04-24", "pblntf_ty": "B", "text": "임직원 보상"},
+        {**base, "rcept_no": "a1", "corp_name": "삼성전자", "report_nm": "사업보고서", "rcept_dt": "2024-03-12",
+         "pblntf_ty": "A", "text": "HBM 매출"},
+        {**base, "rcept_no": "d1", "corp_name": "삼성전자", "report_nm": "의결권대리행사권유참고서류",
+         "rcept_dt": "2024-02-26", "pblntf_ty": "D", "text": "HBM3E 양산"},
+        {**base, "rcept_no": "i4", "corp_name": "SK하이닉스", "report_nm": "유형자산취득결정", "rcept_dt": "2024-04-25",
+         "pblntf_ty": "I", "text": None, "text_status": "대상아님", "rag_target": 0},  # 연결되지만 원문 없음
+    ])
+    return articles, disclosures
+
+
+def test_link_requires_company_window_and_topic():
+    articles, disclosures = make_link_inputs()
+    links = news_link.link(articles, disclosures, window_days=30)
+    assert set(zip(links["news_id"], links["rcept_no"])) == {("n1", "i1"), ("n1", "i4")}
+    assert (links[links["rcept_no"] == "i1"]["days_from_article"] == 4).all()
+
+
+def test_new_rag_target_keeps_a_hbm_and_linked_only():
+    articles, disclosures = make_link_inputs()
+    res = news_link.new_rag_target(disclosures, news_link.link(articles, disclosures)).set_index("rcept_no")
+    assert res["new_rag_target"].to_dict() == {"i1": 1, "i2": 0, "i3": 0, "b1": 0, "a1": 1, "d1": 1, "i4": 0}
+    assert res.loc["i4", "needs_text"] == 1                    # 연결됐지만 원문이 없어 RAG 불가
+    assert res.loc["b1", "new_reason"].startswith(news_link.LINK_VERSION)
+    assert res.loc["i4", "new_reason"] is None                 # 대상아님 공시의 기록은 건드리지 않는다
+
+
+def test_hbm_articles_falls_back_to_tagging_when_news_tag_empty(tmp_path):
+    conn = db.connect(db.init_db(tmp_path / "t.db"))
+    db.write_table(conn, "news", [
+        {"news_id": "n1", "published_at": "2024-04-20", "title": "SK하이닉스 HBM 증설", "content": "본문",
+         "url": "u1", "is_duplicate": 0},
+        {"news_id": "n2", "published_at": "2024-04-20", "title": "반도체 수출 통제", "content": "HBM 한 번",
+         "url": "u2", "is_duplicate": 0},                      # HBM 언급 등급 → 제외
+        {"news_id": "n3", "published_at": "2024-04-20", "title": "SK하이닉스 HBM 증설", "content": "본문",
+         "url": "u3", "is_duplicate": 1},                      # 중복 기사 → 제외
+    ])
+    art, source = news_link.hbm_articles(conn)
     conn.close()
-    sections, numbers = parse_documents.sections_main(db_path=tmp_path / "t.db")
-    assert set(sections["rcept_no"]) == {"a1"} and len(numbers) == 1
-    assert "매출 및 수주상황" not in set(sections["section"])
-    by = sections.set_index("section")
-    assert by.loc["주요계약 및 연구개발활동", "section_type"] == "연구개발"
-    assert by.loc["주요계약 및 연구개발활동", "hbm_count"] == 2  # HBM + 고대역폭
-    assert numbers.iloc[0]["period"] == "2025.12" and numbers.iloc[0]["n_sections"] == 7
-    assert (section_outputs / "sections_path.csv").exists()
+    assert art["news_id"].tolist() == ["n1"] and art.loc[0, "companies"] == ("SK하이닉스",)
+    assert "즉석 계산" in source
