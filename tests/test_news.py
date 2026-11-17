@@ -335,3 +335,76 @@ def test_load_is_rerunnable(tmp_path):
     conn.close()
     assert stats["rows"] == 2 and stats["missing_content"] == 1
     assert stats["by_category"] == {"기술 및 트렌드": 1, "규제 및 정책": 1}
+
+
+# ── 전처리 (preprocess) ──
+
+from src.news import preprocess as pp
+
+
+def test_normalize_title_ignores_spacing_and_quotes():
+    a = pp.normalize_title("‘K반도체’에 정책금융 14조 쏟는다…용인·평택 송전선도 정부 지원")
+    b = pp.normalize_title("'K반도체'에 정책금융 14조 쏟는다…용인 · 평택 송전선도 정부 지원")
+    assert a == b
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("본문입니다.  무단 전재, 재배포 및 AI학습 이용 금지", "본문입니다."),
+        ("첫 줄\n\n둘째   줄", "첫 줄 둘째 줄"),
+        ("   ", None),
+        (None, None),
+    ],
+)
+def test_clean_text(text, expected):
+    assert pp.clean_text(text) == expected
+
+
+def _news(rows):
+    return pd.DataFrame(rows, columns=["news_id", "published_at", "title"])
+
+
+def test_mark_duplicates_groups_reposts_and_keeps_earliest():
+    df = _news([
+        ("b", "2024-01-15", "AI 반도체 1등…판교 R&D 허브 조성"),
+        ("a", "2024-01-15", "AI반도체 1등…판교 R&D 허브 조성"),   # 같은 날, 띄어쓰기만 다름
+        ("c", "2024-01-16", "다른 기사"),
+    ])
+    out = pp.mark_duplicates(df).set_index("news_id")
+    assert out.loc["a", "is_duplicate"] == 0 and out.loc["b", "is_duplicate"] == 1
+    assert out.loc["a", "dup_group_id"] == "a" and out.loc["b", "dup_group_id"] == "a"
+    assert out.loc["c", "is_duplicate"] == 0 and pd.isna(out.loc["c", "dup_group_id"])
+
+
+def test_mark_duplicates_ignores_same_title_far_apart():
+    # '[연합뉴스 이 시각 헤드라인]'처럼 제목은 같아도 날짜가 멀면 다른 기사다
+    df = _news([
+        ("x", "2024-01-01", "[연합뉴스 이 시각 헤드라인] - 18:00"),
+        ("y", "2024-03-01", "[연합뉴스 이 시각 헤드라인] - 18:00"),
+        ("z", "2024-03-03", "[연합뉴스 이 시각 헤드라인] - 18:00"),
+    ])
+    out = pp.mark_duplicates(df).set_index("news_id")
+    assert out["is_duplicate"].to_dict() == {"x": 0, "y": 0, "z": 1}
+    assert out.loc["z", "dup_group_id"] == "y" and pd.isna(out.loc["x", "dup_group_id"])
+
+
+def test_preprocess_run_is_rerunnable(tmp_path):
+    csv = tmp_path / "news.csv"
+    _raw([
+        ("SK하이닉스, HBM 공급 확대", "HBM 공급 계약. 무단 전재 금지", "u1", "2024-01-01T09:00:00", "m", "news", "반도체 R&D"),
+        ("SK하이닉스, HBM 공급 확대", "HBM 공급 계약", "u2", "2024-01-01T10:00:00", "m2", "news", "반도체 R&D"),
+        ("날씨", "맑음", "u3", "2024-01-02T00:00:00", "m", "news", "반도체 R&D"),
+    ]).to_csv(csv, index=False, encoding="utf-8-sig")
+    db_path = tmp_path / "t.db"
+    dbmod.init_db(db_path)
+    conn = dbmod.connect(db_path)
+    ln.load(csv, conn, date(2023, 10, 19), date(2026, 10, 19))
+    for _ in range(2):  # 두 번 돌려도 결과가 같아야 한다
+        stats = pp.run(conn)
+    assert stats["duplicates"] == 1 and stats["dup_groups"] == 1
+    assert conn.execute("SELECT COUNT(*) FROM news WHERE is_duplicate = 1").fetchone()[0] == 1
+    tags = conn.execute("SELECT news_id, tag, relevance FROM news_tag ORDER BY news_id, tag").fetchall()
+    assert len(tags) == 4  # 기사 2건 × (HBM, SK하이닉스), '날씨'는 태그 없음
+    assert stats["tag_rows"] == 4 and dbmod.foreign_key_violations(conn) == []
+    conn.close()
