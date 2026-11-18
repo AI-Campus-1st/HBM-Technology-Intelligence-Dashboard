@@ -40,7 +40,7 @@
 | 뉴스 CSV (`data/raw/news/`) | 제공 | 둘 다 같은 제공 파일 사용 (`config.NEWS_CSV`) |
 | DART 원본 (`data/raw/dart/`) | 한도윤 | 수집 후 폴더를 zip으로 공유 드라이브에 올림. 김한승은 풀어서 `parse_documents`만 실행 (API 키·호출 불필요). 첨부 PDF(`data/raw/dart/attachments/`)도 같은 zip에 넣는다. 받은 쪽은 `collect_attachments --extract`로 텍스트만 추출 |
 | LLM 분류 결과 | 김한승 | 다시 만들면 비용이 들고 결과가 달라지므로 `data/processed/`에 파일(CSV 등)로 저장해 공유. DB 적재는 그 파일을 읽어서 한다 |
-| 벡터 DB (`data/vectordb/`) | 한도윤 | 공유 드라이브로 전달 |
+| 벡터 DB (`data/vectordb/`) | 한도윤 | `build_index` 후 폴더를 zip으로 공유 드라이브에 올림. 받은 쪽은 풀기만 한다 (다시 임베딩하지 않음). `data/vectordb/manifest.json`의 `chunks_fingerprint`가 상대 `build_index --dry-run`의 지문과 같으면 같은 청크로 만든 DB다 |
 
 - 사람이 만든 표본 검수 결과(`data/labels/`)만 git에 커밋한다. 나머지 `data/`는 커밋하지 않는다.
 

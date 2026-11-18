@@ -93,7 +93,7 @@ copy .env.example .env
 | 8-1 | `python -m src.dart.issue_evidence` | 공동 | 급증 구간별 근거 공시 후보 → `issue_evidence` (8·6-1 다음. 사람 확인은 `data/labels/issue_evidence_review_v1.csv`의 `verified`를 채우고 다시 실행. 급증 기준을 바꿀 때는 `--clear` → 8 → 8-1) |
 | 8-2 | `python -m src.eda.news_sql_report` | 김한승 | 뉴스 SQL 집계 `sql/01~03_*.sql` 실행 (8 다음 — 03이 `issues`를 읽음. `outputs/reports/sql01~03_*.csv`) |
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
-| 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB |
+| 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB `data/vectordb/` (6-2 다음. OpenAI 임베딩 호출, `--dry-run`은 토큰 수만, `--query "질문"`은 검색만. 김한승은 실행하지 않고 공유 드라이브의 vectordb zip을 풀어 쓴다) |
 | 11 | `streamlit run dashboard/app.py` | 공동 | 대시보드 실행 |
 
 > 2·7·9(김한승)와 3~6·10(한도윤)은 서로 독립이라 병행할 수 있습니다.
@@ -246,7 +246,7 @@ mid_project/
 | 파일 | 일정 | 목적 |
 |---|---|---|
 | `chunking.py` | Day 3 | RAG 대상 공시를 청크(1,000자, 겹침 150자)로 나누고 공시명·제출일·링크·섹션 메타데이터를 붙인다. 정기보고서는 사업·제품·투자·연구개발 섹션만, 표는 행 단위로 묶어서 자른다. |
-| `build_index.py` | Day 5 | 임베딩 후 벡터 DB(`data/vectordb`)에 **미리 저장**. |
+| `build_index.py` | Day 5 | 청크를 `text-embedding-3-small`로 임베딩해 Chroma(`data/vectordb`, 컬렉션 `disclosure_chunks`)에 **미리 저장**. `manifest.json`에 모델·청크 수·청크 지문을 남겨 공유본을 맞춰 본다. |
 | `qa_chain.py` | Day 5 | LangChain 질의응답. 근거 공시를 표시하고, 근거가 없으면 답변을 거절한다. |
 
 ### `dashboard/` — Streamlit
