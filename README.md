@@ -95,6 +95,7 @@ copy .env.example .env
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
 | 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB `data/vectordb/` (6-2 다음. OpenAI 임베딩 호출, `--dry-run`은 토큰 수만, `--query "질문"`은 검색만. 김한승은 실행하지 않고 공유 드라이브의 vectordb zip을 풀어 쓴다) |
 | 10-1 | `python -m src.rag.qa_chain "질문"` | 한도윤 | 공시 근거 질의응답 (10 다음. `--samples`는 예시 질문 9개 → `outputs/reports/qa_samples.csv`. LLM은 `config.LLM_MODEL`) |
+| 10-2 | `python -m src.rag.evaluate` | 한도윤 | 공시 Q&A 평가 (10-1 다음. 평가 질문 `data/labels/qa_eval_v1.csv` 24문항 → `outputs/reports/qa_eval_v1.csv`·`qa_eval_v1_summary.csv`. 질문마다 LLM 1회) |
 | 11 | `streamlit run dashboard/app.py` | 공동 | 대시보드 실행 |
 
 > 2·7·9(김한승)와 3~6·10(한도윤)은 서로 독립이라 병행할 수 있습니다.
@@ -249,6 +250,7 @@ mid_project/
 | `chunking.py` | Day 3 | RAG 대상 공시를 청크(1,000자, 겹침 150자)로 나누고 공시명·제출일·링크·섹션 메타데이터를 붙인다. 정기보고서는 사업·제품·투자·연구개발 섹션만, 표는 행 단위로 묶어서 자른다. |
 | `build_index.py` | Day 5 | 청크를 `text-embedding-3-small`로 임베딩해 Chroma(`data/vectordb`, 컬렉션 `disclosure_chunks`)에 **미리 저장**. `manifest.json`에 모델·청크 수·청크 지문을 남겨 공유본을 맞춰 본다. |
 | `qa_chain.py` | Day 5 | 공시 근거 질의응답. 기업 필터(비교 질문은 기업별 검색) → 벡터 후보 40개 + 키워드(BM25) RRF 재정렬 → `gpt-6-luna` 구조화 답변. 출처(공시명·제출일·링크·첨부 쪽)를 붙이고, 검색 거리 기준·LLM 판단으로 근거가 없으면 거절한다. |
+| `evaluate.py` | Day 5 | 평가 질문(정답 근거·핵심 사실)으로 검색 적중(하이브리드 vs 벡터만)·답변 정확·거절 정확·위임장(D) 비중·거리 분포를 잰다. |
 
 ### `dashboard/` — Streamlit
 
