@@ -49,7 +49,7 @@
 
 ## issue_summary_v1.csv - 급증 구간 사건 요약 (공동)
 
-`issues.summary`(사건 요약)의 원본입니다. `spike_detection`이 실행할 때마다 `summary`를 비우기 때문에, 요약은 DB가 아니라 이 파일에 둡니다. `spike_detection`이 이 파일을 읽어 채우는 부분은 김한승과 합의한 뒤에 추가합니다.
+`issues.summary`(사건 요약)의 원본입니다. `spike_detection`이 실행할 때마다 `summary`를 비우기 때문에, 요약은 DB가 아니라 이 파일에 둡니다. DB 반영은 `spike_detection`을 고치지 않고 따로 `python -m src.dart.issue_summary --apply`로 합니다 (확정 행만, 2026-11-18).
 
 | 열 | 내용 |
 |---|---|
@@ -61,6 +61,8 @@
 
 - **쓰는 원칙:** 인과를 쓰지 않는다("공시 때문에 보도 증가" 대신 "같은 시기 공시로 확인"). 발언의 출처가 콘퍼런스콜(기사)이면 그렇게 적는다.
 - `status=확정`인 행만 대시보드와 리포트 3.1에 쓴다.
+- **점검:** `python -m src.dart.issue_summary`가 구간 누락·중복, status 값, `evidence_rcept_no`가 그 구간의 `verified=1` 근거인지 확인한다. 근거 중 요약에 안 쓴 공시는 경고로 보여 준다.
+- **확정 방법:** 사람이 요약과 원문(공시 첨부·기사)을 대조한 뒤 `status`를 `확정`, `reviewer`를 이름으로 바꾸고 `--apply`를 실행한다. 2026-11-18 원문 대조(첨부 자료 인용·기사 건수)는 `note`에 적었다. 6구간 모두 아직 `초안`이다.
 
 ## qa_eval_v1.csv — 공시 Q&A 평가 질문 (한도윤)
 
