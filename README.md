@@ -94,7 +94,7 @@ copy .env.example .env
 | 8-2 | `python -m src.eda.news_sql_report` | 김한승 | 뉴스 SQL 집계 `sql/01~03_*.sql` 실행 (8 다음 — 03이 `issues`를 읽음. `outputs/reports/sql01~03_*.csv`) |
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
 | 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB `data/vectordb/` (6-2 다음. OpenAI 임베딩 호출, `--dry-run`은 토큰 수만, `--query "질문"`은 검색만. 김한승은 실행하지 않고 공유 드라이브의 vectordb zip을 풀어 쓴다) |
-| 10-1 | `python -m src.rag.qa_chain "질문"` | 한도윤 | 공시 근거 질의응답 (10 다음. `--samples`는 예시 질문 9개 → `outputs/reports/qa_samples.csv`. LLM은 `config.LLM_MODEL`) |
+| 10-1 | `python -m src.rag.qa_chain "질문"` | 한도윤 | 공시 근거 질의응답 (10 다음. `--samples`는 예시 질문 9개 → `outputs/reports/qa_samples.csv`, 대시보드용 저장 답변 `qa_samples.json`. LLM은 `config.LLM_MODEL`) |
 | 10-2 | `python -m src.rag.evaluate` | 한도윤 | 공시 Q&A 평가 (10-1 다음. 평가 질문 `data/labels/qa_eval_v1.csv` 24문항 → `outputs/reports/qa_eval_v1.csv`·`qa_eval_v1_summary.csv`. 질문마다 LLM 1회) |
 | 11 | `streamlit run dashboard/app.py` | 공동 | 대시보드 실행 |
 
@@ -258,7 +258,7 @@ mid_project/
 |---|---|---|
 | `app.py` | 공동 | 진입점. 상단 결론과 페이지 연결만 두고 로직은 넣지 않아 충돌을 줄인다. |
 | `pages/1_이슈_분석.py` | 김한승 | HBM 이슈 비중·급증 추이, 기업별 보도 점유·감성 비교 화면. |
-| `pages/2_공시_QA.py` | 한도윤 | 공시 Q&A 화면: 질문 → 답변·근거 공시 카드(DART 링크·발췌), 거절 표시, 검색 대상 공시 101건 목록(기업·유형 필터). |
+| `pages/2_공시_QA.py` | 한도윤 | 공시 Q&A 화면: 예시 질문은 저장된 답변(API 호출 없음), 직접 질문은 실시간 → 답변·근거 공시 카드(DART 링크·발췌), 거절 표시, 검색 대상 공시 101건 목록(기업·유형 필터). |
 | `components/filters.py` | 공동 | 기간·기업(SK하이닉스/삼성전자)·카테고리·기술 태그 공통 필터. 모든 차트가 이 값을 받는다. |
 | `components/conclusion.py` | 공동 | 상단 의사결정 결론 문구. |
 | `components/issue_charts.py` | 김한승 | Plotly 이슈·감성 차트 함수. |

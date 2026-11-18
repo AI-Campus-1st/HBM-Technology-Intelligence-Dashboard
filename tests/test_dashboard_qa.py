@@ -95,3 +95,30 @@ def test_hero_and_stats_without_manifest():
     assert "-건" in qa_view.hero_html(None, "2026-10-19")
     html = qa_view.stats_html({"n_disclosures": 101, "n_attachment_chunks": 351}, {"전체 정확": "21/24"})
     assert "101" in html and "351" in html and "21/24" in html
+
+
+def test_read_saved_answers_maps_question_to_result_and_texts(tmp_path):
+    src = {"n": 1, "corp_name": "SK하이닉스", "report_nm": "실적", "rcept_dt": "2024-10-24", "url": "u",
+           "location": "본문", "distance": 0.4, "chunk_id": "c1"}
+    r = qa_chain.QAResult("q1", "답 [1]", True, None, "SK하이닉스", 6, [src])
+    path = tmp_path / "s.json"
+    qa_chain.save_samples_json([r], {"c1": "근거 본문"}, path)
+    saved = loader.read_saved_answers(path)
+    assert saved["answers"]["q1"] == (r, {"c1": "근거 본문"}) and saved["created_at"]
+    assert loader.read_saved_answers(tmp_path / "none.json") is None
+
+
+def test_saved_answers_file_covers_sample_questions():
+    saved = loader.read_saved_answers()
+    assert saved is not None, "outputs/reports/qa_samples.json이 없습니다: python -m src.rag.qa_chain --samples"
+    assert set(saved["answers"]) == {q for q, _ in qa_chain.SAMPLE_QUESTIONS}
+    expected = dict(qa_chain.SAMPLE_QUESTIONS)
+    for q, (r, texts) in saved["answers"].items():
+        assert ("답변" if r.answerable else "거절") == expected[q]
+        assert all(texts.get(s["chunk_id"]) for s in r.sources)  # 발췌 본문까지 저장돼 있다
+
+
+def test_answer_html_shows_saved_note():
+    r = qa_chain.QAResult("q", "답", True, None, None, 1)
+    assert 'qa-badge saved">저장된 답변 · 2026-11-18 생성' in qa_view.answer_html(r, "저장된 답변 · 2026-11-18 생성")
+    assert "saved" not in qa_view.answer_html(r)

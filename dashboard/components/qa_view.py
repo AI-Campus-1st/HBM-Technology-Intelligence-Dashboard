@@ -70,8 +70,10 @@ hr { border-color: #2a2a2a !important; }
 .stApp [data-testid="stButtonGroup"] button {
   border-radius: 9999px; background: var(--surface-2); color: var(--text); border: none; font-size: 13px;
 }
+.stApp [data-testid="stButtonGroup"] button:hover { background: #2a2a2a; color: var(--text); }
 .stApp [data-testid="stButtonGroup"] button[aria-checked="true"],
-.stApp [data-testid="stButtonGroup"] button[aria-pressed="true"] { background: var(--text); color: #000000; border: none; }
+.stApp [data-testid="stButtonGroup"] button[aria-pressed="true"],
+.stApp [data-testid="stButtonGroup"] button[data-selected="true"] { background: var(--text) !important; color: #000000; border: none; }
 .stApp [data-testid="stButtonGroup"] button[aria-checked="true"] *,
 .stApp [data-testid="stButtonGroup"] button[aria-pressed="true"] * { color: #000000; }
 
@@ -102,6 +104,7 @@ hr { border-color: #2a2a2a !important; }
   background: var(--card); color: var(--text-3); }
 .qa-badge.ok { background: rgba(30,215,96,0.14); color: var(--green); }
 .qa-badge.no { background: rgba(243,114,127,0.14); color: var(--red); }
+.qa-badge.saved { background: rgba(83,157,245,0.14); color: var(--blue); }
 .qa-cite { display: inline-block; min-width: 20px; padding: 0 6px; margin: 0 1px; border-radius: 9999px;
   background: var(--card); color: var(--text); font-size: 11px; font-weight: 700; text-align: center;
   line-height: 18px; vertical-align: 2px; }
@@ -182,8 +185,8 @@ def stats_html(manifest: dict | None, summary: dict) -> str:
     return f'<div class="qa-stats">{cells}</div>'
 
 
-def answer_html(result) -> str:
-    """답변 카드. 거절이면 빨간 줄과 거절 이유를 보인다."""
+def answer_html(result, note: str | None = None) -> str:
+    """답변 카드. 거절이면 빨간 줄과 거절 이유를 보인다. note는 '저장된 답변 · 생성일' 같은 출처 표시."""
     badges = []
     if result.answerable:
         badges.append('<span class="qa-badge ok">근거 기반 답변</span>')
@@ -193,6 +196,8 @@ def answer_html(result) -> str:
             badges.append(f'<span class="qa-badge">{esc(result.refusal_reason)}</span>')
     badges.append(f'<span class="qa-badge">기업 필터: {esc(result.company_filter or "없음 (전체)")}</span>')
     badges.append(f'<span class="qa-badge">검색된 근거 {result.retrieved}개</span>')
+    if note:
+        badges.append(f'<span class="qa-badge saved">{esc(note)}</span>')
     cls = "qa-answer" if result.answerable else "qa-answer refused"
     return (f'<div class="{cls}"><div class="q">Q. {esc(result.question)}</div>'
             f'<div class="a">{cite_html(result.answer)}</div><div class="qa-meta">{"".join(badges)}</div></div>')
@@ -234,9 +239,9 @@ def render_html(markup: str) -> None:
     st.markdown(markup, unsafe_allow_html=True)
 
 
-def render_result(result, texts: dict[str, str] | None = None) -> None:
+def render_result(result, texts: dict[str, str] | None = None, note: str | None = None) -> None:
     texts = texts or {}
-    render_html(answer_html(result))
+    render_html(answer_html(result, note))
     if result.sources:
         render_html(f'<div class="qa-section" style="font-size:18px">근거 공시 {len(result.sources)}건</div>')
         render_html("".join(source_html(s, texts.get(s.get("chunk_id"))) for s in result.sources))

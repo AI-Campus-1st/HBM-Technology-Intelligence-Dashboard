@@ -3,6 +3,9 @@ DB에서 공시 목록·건수를 조회하고 벡터 DB를 로드한다.
 
 - 저장된 결과만 읽는다: SQLite(disclosure), 벡터 DB 매니페스트(data/vectordb/manifest.json),
   평가 요약(outputs/reports/qa_eval_v1_summary.csv). 없으면 None·빈 표를 돌려주고 화면이 안내한다.
+- 예시 질문 9개는 미리 저장한 답변(outputs/reports/qa_samples.json, `qa_chain --samples`로 생성)을 보여 준다.
+  API를 부르지 않으므로 키·벡터 DB가 없어도, 발표 중 네트워크가 끊겨도 예시 답변은 보인다.
+- 직접 입력한 질문만 실시간으로 답한다 (질문 임베딩 + LLM). 질문이 미리 정해져 있지 않아 저장해 둘 수 없기 때문이다.
 - 벡터 DB·LLM 객체는 한 번만 만들어 재사용한다 (st.cache_resource). 질문 답변은 qa_chain.ask가 한다.
 
 담당: 한도윤 (공시 분석)
@@ -67,6 +70,16 @@ def readiness(manifest: dict | None, api_key: str | None = None) -> list[str]:
     return problems
 
 
+def read_saved_answers(path: Path | None = None) -> dict | None:
+    """저장된 예시 답변: {"created_at", "model", "answers": {질문: (QAResult, {chunk_id: 본문})}}. 없으면 None."""
+    data = qa_chain.load_samples_json(path)
+    if data is None:
+        return None
+    answers = {r.question: (r, {s["chunk_id"]: data["texts"].get(s["chunk_id"], "") for s in r.sources})
+               for r in data["results"]}
+    return {"created_at": data["created_at"], "model": data["model"], "answers": answers}
+
+
 def chunk_texts(store, ids: list[str]) -> dict[str, str]:
     """청크 id → 본문. 근거 발췌를 보여 줄 때 쓴다."""
     if not ids:
@@ -89,6 +102,11 @@ def load_eval_summary() -> dict:
 @st.cache_data(show_spinner=False)
 def load_rag_disclosures() -> pd.DataFrame:
     return read_rag_disclosures()
+
+
+@st.cache_data(show_spinner=False)
+def load_saved_answers() -> dict | None:
+    return read_saved_answers()
 
 
 @st.cache_resource(show_spinner=False)

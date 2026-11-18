@@ -21,7 +21,8 @@
 링크·위치·거리·chunk_id), retrieved(검색된 청크 수). 대시보드는 이 결과를 그대로 보여 준다.
 
 실행: python -m src.rag.qa_chain "SK하이닉스 2024년 3분기 HBM 매출 증가율은?"
-      python -m src.rag.qa_chain --samples   (예시 질문 묶음 실행 → outputs/reports/qa_samples.csv)
+      python -m src.rag.qa_chain --samples   (예시 질문 묶음 실행 → outputs/reports/qa_samples.csv,
+                                             대시보드용 qa_samples.json: 답변·출처·근거 발췌)
       (build_index 다음. 질문 임베딩과 답변에 OpenAI API 호출)
 
 담당: 한도윤 (공시 분석)
@@ -29,10 +30,12 @@
 """
 
 import argparse
+import json
 import math
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
 
 import pandas as pd
 from pydantic import BaseModel, Field
@@ -47,6 +50,8 @@ RRF_K = 60  # Reciprocal Rank Fusion 상수 (관례값)
 MAX_DISTANCE = 0.65
 REFUSAL = "제공된 공시 자료에서 근거를 찾을 수 없어 답변할 수 없습니다."
 SAMPLES_PATH = config.OUTPUTS_DIR / "reports" / "qa_samples.csv"
+# 대시보드가 API 없이 보여 줄 예시 답변 (답변·출처·근거 발췌 전체). 질문 묶음을 다시 돌리면 갱신된다
+SAMPLES_JSON_PATH = config.OUTPUTS_DIR / "reports" / "qa_samples.json"
 
 COMPANY_PATTERNS = {
     "SK하이닉스": re.compile(r"SK\s*하이닉스|하이닉스|SK\s*hynix|\bSK\b", re.I),
@@ -237,12 +242,48 @@ SAMPLE_QUESTIONS = [
 ]
 
 
-def run_samples(store=None, llm=None) -> pd.DataFrame:
+def source_texts(store, results: list[QAResult]) -> dict[str, str]:
+    """출처 청크 id → 본문 (예시 답변 저장용). store에 get이 없으면 빈 dict."""
+    ids = list(dict.fromkeys(s["chunk_id"] for r in results for s in r.sources))
+    if not ids or not hasattr(store, "get"):
+        return {}
+    got = store.get(ids=ids)
+    return dict(zip(got["ids"], got["documents"]))
+
+
+def save_samples_json(results: list[QAResult], texts: dict[str, str], path=None) -> dict:
+    """예시 답변을 JSON으로 저장한다. 대시보드는 이 파일을 읽어 API 호출 없이 예시 답변을 보여 준다."""
+    manifest = build_index.MANIFEST_PATH
+    fingerprint = json.loads(manifest.read_text(encoding="utf-8")).get("chunks_fingerprint") if manifest.exists() else None
+    data = {
+        "created_at": datetime.now().isoformat(timespec="seconds"), "model": config.LLM_MODEL,
+        "embedding_model": build_index.EMBEDDING_MODEL, "chunks_fingerprint": fingerprint,
+        "results": [asdict(r) for r in results],
+        "texts": {cid: texts[cid] for r in results for cid in (s["chunk_id"] for s in r.sources) if cid in texts},
+    }
+    path = path or SAMPLES_JSON_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return data
+
+
+def load_samples_json(path=None) -> dict | None:
+    """저장된 예시 답변. 없으면 None. results는 QAResult로 바꿔 돌려준다."""
+    path = path or SAMPLES_JSON_PATH
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["results"] = [QAResult(**r) for r in data["results"]]
+    return data
+
+
+def run_samples(store=None, llm=None, json_path=None) -> pd.DataFrame:
     store = store if store is not None else build_index.open_store()
     llm = llm if llm is not None else make_llm()
-    rows = []
+    rows, results = [], []
     for q, expected in SAMPLE_QUESTIONS:
         r = ask(q, store, llm)
+        results.append(r)
         print(format_result(r) + "\n")
         rows.append({
             "question": q, "expected": expected, "result": "답변" if r.answerable else "거절",
@@ -256,14 +297,16 @@ def run_samples(store=None, llm=None) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     SAMPLES_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(SAMPLES_PATH, index=False, encoding="utf-8-sig")
-    print(f"기대와 같음 {int((df['expected'] == df['result']).sum())}/{len(df)}  저장: {SAMPLES_PATH}")
+    save_samples_json(results, source_texts(store, results), json_path)
+    print(f"기대와 같음 {int((df['expected'] == df['result']).sum())}/{len(df)}  "
+          f"저장: {SAMPLES_PATH}, {json_path or SAMPLES_JSON_PATH}")
     return df
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="공시 근거 질의응답")
     parser.add_argument("question", nargs="?", help="질문")
-    parser.add_argument("--samples", action="store_true", help="예시 질문 묶음 실행 → qa_samples.csv")
+    parser.add_argument("--samples", action="store_true", help="예시 질문 묶음 실행 → qa_samples.csv·qa_samples.json")
     parser.add_argument("-k", type=int, default=K)
     args = parser.parse_args()
     if args.samples:
