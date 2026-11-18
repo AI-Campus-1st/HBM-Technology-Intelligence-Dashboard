@@ -258,13 +258,13 @@ mid_project/
 |---|---|---|
 | `app.py` | 공동 | 진입점. 상단 결론과 페이지 연결만 두고 로직은 넣지 않아 충돌을 줄인다. |
 | `pages/1_이슈_분석.py` | 김한승 | HBM 이슈 비중·급증 추이, 기업별 보도 점유·감성 비교 화면. |
-| `pages/2_공시_QA.py` | 한도윤 | 기업별 공시 근거와 공시 Q&A 화면. |
+| `pages/2_공시_QA.py` | 한도윤 | 공시 Q&A 화면: 질문 → 답변·근거 공시 카드(DART 링크·발췌), 거절 표시, 검색 대상 공시 101건 목록(기업·유형 필터). |
 | `components/filters.py` | 공동 | 기간·기업(SK하이닉스/삼성전자)·카테고리·기술 태그 공통 필터. 모든 차트가 이 값을 받는다. |
 | `components/conclusion.py` | 공동 | 상단 의사결정 결론 문구. |
 | `components/issue_charts.py` | 김한승 | Plotly 이슈·감성 차트 함수. |
-| `components/qa_view.py` | 한도윤 | 질문 입력, 답변, 근거 공시 표시 UI. |
+| `components/qa_view.py` | 한도윤 | 답변·근거 카드·공시 목록 HTML과 페이지 전용 어두운 테마(Spotify 디자인 문서 참조). |
 | `data_access/issue_loader.py` | 김한승 | 뉴스·분석 결과 조회 (`st.cache_data`). |
-| `data_access/disclosure_loader.py` | 한도윤 | 공시 데이터·벡터 DB 로드. |
+| `data_access/disclosure_loader.py` | 한도윤 | RAG 대상 공시 목록·벡터 DB 매니페스트·평가 요약 읽기, 벡터 DB·LLM 1회 로드(`st.cache_resource`). |
 
 ### `data/` — 데이터 (git 제외)
 
