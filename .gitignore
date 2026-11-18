@@ -8,6 +8,7 @@ data/raw/**
 data/processed/**
 data/db/**
 data/vectordb/**
+data/*.zip
 !data/**/
 !data/**/.gitkeep
 !data/**/README.md
