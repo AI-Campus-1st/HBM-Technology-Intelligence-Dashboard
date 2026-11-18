@@ -118,3 +118,44 @@ def test_main_reads_only_rag_targets_and_round_trips(tmp_path, monkeypatch):
     assert docs[0].metadata["url"] == "https://dart.fss.or.kr/x"
     summary = pd.read_csv(tmp_path / "summary.csv")
     assert summary["n_chunks"].sum() == len(chunks)
+
+
+# ── 첨부 경영설명회 자료 (collect_attachments 결과) ──
+
+ATTACHMENT = {
+    "rcept_no": "i1", "att_rcept_no": "i1", "dcm_no": "100", "file_name": "3Q24_Earnings Presentation_KOR.pdf",
+    "n_pages": 3, "n_chars": 0, "n_hbm": 1,
+    "pages": ["실적발표", "이익 분석\nHBM\n매출 QoQ +70% 이상, YoY +330% 이상\n고부가가치제품 판매 확대", ""],
+}
+
+
+def test_attachment_pages_become_separate_chunks():
+    df = pd.DataFrame(disclosure_rows())
+    other = {**ATTACHMENT, "rcept_no": "zz"}  # 대상 공시가 아닌 첨부는 쓰지 않는다
+    chunks = chunking.chunk_disclosures(df, attachments=[ATTACHMENT, other])
+    att = [c for c in chunks if c["section"] == chunking.ATTACHMENT_SECTION]
+    assert [c["chunk_id"] for c in att] == ["i1_a1p02_000"]  # 1쪽(표지, 30자 미만)·3쪽(빈 쪽)은 버린다
+    c = att[0]
+    assert (c["page"], c["file_name"], c["section_type"]) == (2, ATTACHMENT["file_name"], "IR자료")
+    assert c["text"].startswith(
+        "[삼성전자 | 신규시설투자등 | 제출일 2024-04-24 | 첨부 3Q24_Earnings Presentation_KOR.pdf p.2]\n")
+    assert "HBM | 매출 QoQ +70% 이상, YoY +330% 이상" in c["text"] and c["has_hbm"]
+    body = next(c for c in chunks if c["chunk_id"] == "i1_00_000")
+    assert (body["page"], body["file_name"]) == (0, "")  # 본문 청크 (Chroma 메타데이터에 None을 넣지 않는다)
+
+
+def test_main_uses_attachment_texts_of_rag_targets(tmp_path, monkeypatch):
+    from src.dart import collect_attachments
+
+    monkeypatch.setattr(chunking, "CHUNKS_PATH", tmp_path / "chunks.jsonl")
+    monkeypatch.setattr(chunking, "SUMMARY_PATH", tmp_path / "summary.csv")
+    monkeypatch.setattr(collect_attachments, "TEXT_PATH", tmp_path / "att.jsonl")
+    collect_attachments.save_texts([ATTACHMENT])
+    conn = db.connect(db.init_db(tmp_path / "t.db"))
+    db.write_table(conn, "disclosure", [{**r, "text_status": "확보", "rag_target": 1} for r in disclosure_rows()])
+    conn.close()
+
+    chunks = chunking.main(db_path=tmp_path / "t.db")
+    assert "i1_a1p02_000" in {c["chunk_id"] for c in chunks}
+    doc = next(d for d in chunking.to_documents(chunks) if d.id == "i1_a1p02_000")
+    assert doc.metadata["page"] == 2

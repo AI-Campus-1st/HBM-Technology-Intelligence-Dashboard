@@ -8,6 +8,9 @@ HBM 기사와 공시를 연결하고, 그 결과로 RAG 대상 공시(disclosure
         단 '실적' 주제로만 연결된 공시는 RAG 선정에 쓰지 않는다 (RAG_EXCLUDE_TOPICS). 잠정실적은 분기마다
         반복돼 거의 모든 기사와 연결되고, 실적 공시는 계절성이라 급증 근거로 쓰지 않기로 했다 (리포트 3.2).
         이 연결은 근거 카드(issue_evidence) 후보에는 그대로 남긴다.
+    (4) 첨부 경영설명회 자료(collect_attachments)에 'HBM'이 나오는 공시 (2026-11-18, 초안 §11 논의 질문 8)
+        실적 공시 본문은 숫자뿐이고 HBM 발언은 첨부에 있다. (2)와 같은 기준을 첨부에도 적용한 것
+        (data/labels/README '첨부도 본다'). 첨부를 수집하지 않은 환경에서는 이 근거가 0건이다.
 원문이 없는 공시(대상아님·실패)는 연결되더라도 RAG에 넣을 수 없으므로 '원문 필요'로 따로 보고한다.
 
 연결 규칙 (LINK_VERSION, 김한승과 확정 전 초안):
@@ -41,6 +44,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.common import config, db
+from src.dart import collect_attachments
 from src.news import tagging
 
 LINK_VERSION = "link_v2"
@@ -179,7 +183,14 @@ def link(articles: pd.DataFrame, disclosures: pd.DataFrame, window_days: int = W
     return pd.DataFrame(rows, columns=cols)
 
 
-def new_rag_target(disclosures: pd.DataFrame, links: pd.DataFrame) -> pd.DataFrame:
+def attachment_hbm_rcept_nos(records: list[dict] | None = None) -> set[str]:
+    """첨부 텍스트에 HBM이 나오는 공시의 접수번호 (DB disclosure 기준)."""
+    records = collect_attachments.load_texts() if records is None else records
+    return {r["rcept_no"] for r in records if r["n_hbm"] > 0}
+
+
+def new_rag_target(disclosures: pd.DataFrame, links: pd.DataFrame,
+                   attachment_hbm: set[str] | frozenset[str] = frozenset()) -> pd.DataFrame:
     """새 기준의 rag_target과 이유. 원문이 있는 공시만 RAG 대상이 될 수 있다."""
     df = disclosures.copy()
     rag_links = links[~links["topic"].isin(RAG_EXCLUDE_TOPICS)]
@@ -187,12 +198,13 @@ def new_rag_target(disclosures: pd.DataFrame, links: pd.DataFrame) -> pd.DataFra
     df["by_A"] = df["pblntf_ty"] == "A"
     df["by_hbm"] = df["text"].fillna("").str.contains("HBM")
     df["by_link"] = df["rcept_no"].isin(set(rag_links["rcept_no"]))
+    df["by_attachment"] = df["rcept_no"].isin(set(attachment_hbm))
     # 실적 주제로만 연결된 공시 (근거 카드 후보에는 있지만 RAG 근거로는 안 씀)
     df["link_excluded_only"] = df["rcept_no"].isin(set(links["rcept_no"])) & ~df["by_link"]
-    keep = df["by_A"] | df["by_hbm"] | df["by_link"]
+    keep = df["by_A"] | df["by_hbm"] | df["by_link"] | df["by_attachment"]
     df["new_rag_target"] = (has_text & keep).astype(int)
     df["new_reason"] = None
-    df.loc[has_text & ~keep, "new_reason"] = f"{LINK_VERSION}: HBM 언급·뉴스 연결 없음"
+    df.loc[has_text & ~keep, "new_reason"] = f"{LINK_VERSION}: HBM 언급(본문·첨부)·뉴스 연결 없음"
     df["needs_text"] = (~has_text & df["by_link"]).astype(int)  # 연결됐지만 원문이 없어 RAG에 못 넣는 공시
     return df
 
@@ -206,6 +218,7 @@ def summarize(df: pd.DataFrame) -> pd.DataFrame:
         "근거_A": g["by_A"].sum(),
         "근거_HBM언급": g["by_hbm"].sum(),
         "근거_뉴스연결": g["by_link"].sum(),
+        "근거_첨부HBM": g["by_attachment"].sum(),
         "실적연결만_RAG제외": g["link_excluded_only"].sum(),
         "연결됐지만_원문없음": g["needs_text"].sum(),
     }).astype(int)
@@ -230,7 +243,8 @@ def main(apply: bool = False, window_days: int = WINDOW_DAYS, db_path: Path = co
         disclosures = db.read_table(conn, "disclosure", columns=[
             "rcept_no", "corp_name", "report_nm", "rcept_dt", "pblntf_ty", "text", "text_status", "rag_target"])
         links = link(articles, disclosures, window_days)
-        result = new_rag_target(disclosures, links)
+        attachment_hbm = attachment_hbm_rcept_nos()
+        result = new_rag_target(disclosures, links, attachment_hbm)
         if apply:
             apply_to_db(conn, result)
     finally:
@@ -243,6 +257,8 @@ def main(apply: bool = False, window_days: int = WINDOW_DAYS, db_path: Path = co
     summary.to_csv(SUMMARY_PATH, index=False, encoding="utf-8-sig")
 
     print(f"HBM 기사: {len(articles):,}건 — 출처: {source}")
+    print(f"첨부에 HBM이 있는 공시: {len(attachment_hbm)}건"
+          + ("" if attachment_hbm else " (첨부 미수집: python -m src.dart.collect_attachments)"))
     print(f"연결 후보: {len(links):,}건 (기사 {links['news_id'].nunique():,} × 공시 {links['rcept_no'].nunique():,}), "
           f"규칙 {LINK_VERSION}, ±{window_days}일")
     if not links.empty:

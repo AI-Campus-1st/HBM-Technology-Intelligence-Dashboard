@@ -9,10 +9,15 @@
 - 그 밖의 공시(B·D·I·J)는 본문 전체를 섹션 '본문' 하나로 본다.
 - DART 표는 텍스트로 바뀌면 칸마다 줄이 나뉜다. 짧은 줄이 이어지면 ' | '로 묶어 한 줄로 만든 뒤 자른다.
   ('연구개발비용 합계 | 6,732,527 | 4,954,447 | ...'처럼 항목과 값이 같은 청크에 남게 하려는 것)
+- 첨부 경영설명회 자료(collect_attachments, 실적 공시 27건 PDF)는 섹션 '첨부'로 쪽(page)마다 따로 자른다.
+  답변 출처에 '첨부 파일명 p.N'을 보여 줄 수 있게 page·file_name을 메타데이터로 남긴다 (본문 청크는 page=0, file_name='').
+  첨부 텍스트가 없는 환경(미수집)에서는 본문 청크만 만든다.
 - 청크 앞에 머리말 '[기업 | 공시명 | 제출일 | 섹션]'을 붙인다. 본문에 회사명·시점이 없어도 검색되도록.
-- chunk_id = <rcept_no>_<섹션 순번 2자리>_<청크 순번 3자리>. 같은 입력이면 같은 id가 나온다.
+  첨부는 '[기업 | 공시명 | 제출일 | 첨부 <파일명> p.N]'
+- chunk_id = <rcept_no>_<섹션 순번 2자리>_<청크 순번 3자리>, 첨부는 <rcept_no>_a<첨부 순번>p<쪽 2자리>_<청크 순번 3자리>.
+  같은 입력이면 같은 id가 나온다.
 
-실행: python -m src.rag.chunking   (parse_documents 다음. DB만 읽는다)
+실행: python -m src.rag.chunking   (news_link --apply 다음. DB와 첨부 텍스트 data/processed/disclosure_attachments.jsonl을 읽는다)
 
 저장:
 - data/processed/disclosure_chunks.jsonl : 청크 한 줄에 하나 (text + 메타데이터). git에 올리지 않는다
@@ -30,7 +35,7 @@ import pandas as pd
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.common import config, db
-from src.dart import parse_documents
+from src.dart import collect_attachments, parse_documents
 from src.eda.disclosure_trend import categorize
 
 CHUNKS_PATH = config.PROCESSED_DIR / "disclosure_chunks.jsonl"
@@ -47,6 +52,8 @@ TABLE_CELL_MAX = 30
 _SUBHEADING = re.compile(r"^([가-하]\.|\d{1,2}\.\s|\(\d{1,2}\)|[①-⑳]|□|※|\[)")
 
 BODY_SECTION = "본문"
+ATTACHMENT_SECTION = "첨부"
+ATTACHMENT_SECTION_TYPE = "IR자료"
 DETAIL_KEEP_FROM = re.compile(r"^DS\s*부문$")  # 삼성전자 연구개발실적(상세)에서 남길 부문의 시작 줄
 DETAIL_STOP_AT = re.compile(r"^(SDC|Harman|하만)$")  # DS 다음 부문
 
@@ -97,6 +104,10 @@ def header(rec, section: str) -> str:
     return f"[{rec.corp_name} | {rec.report_nm} | 제출일 {rec.rcept_dt} | {section}]"
 
 
+def attachment_label(file_name: str, page: int) -> str:
+    return f"{ATTACHMENT_SECTION} {file_name} p.{page}"
+
+
 def make_splitter(size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> RecursiveCharacterTextSplitter:
     # 줄 → 표 칸 구분(' | ') → 문장 → 공백 순으로 자를 곳을 찾는다
     return RecursiveCharacterTextSplitter(
@@ -104,9 +115,43 @@ def make_splitter(size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> Recur
     )
 
 
-def chunk_disclosures(df: pd.DataFrame, splitter: RecursiveCharacterTextSplitter | None = None) -> list[dict]:
-    """공시 DataFrame(rcept_no·corp_code·corp_name·report_nm·rcept_dt·pblntf_ty·url·text)을 청크 dict 목록으로."""
+def split_pieces(body: str, splitter: RecursiveCharacterTextSplitter) -> list[str]:
+    pieces = [p.strip() for p in splitter.split_text(join_table_cells(body))]
+    return [p for p in pieces if len(p) >= MIN_CHUNK_CHARS]
+
+
+def make_chunk(rec, chunk_id: str, section: str, section_type: str, c_idx: int, piece: str,
+               label: str, page: int = 0, file_name: str = "") -> dict:
+    return {
+        "chunk_id": chunk_id,
+        "rcept_no": rec.rcept_no,
+        "corp_code": rec.corp_code,
+        "corp_name": rec.corp_name,
+        "report_nm": rec.report_nm,
+        "rcept_dt": rec.rcept_dt,
+        "pblntf_ty": rec.pblntf_ty,
+        "url": rec.url,
+        "section": section,
+        "section_type": section_type,
+        "file_name": file_name,
+        "page": page,
+        "chunk_index": c_idx,
+        "n_chars": len(piece),
+        "has_hbm": bool(parse_documents.HBM_PATTERN.search(piece)),
+        "text": f"{header(rec, label)}\n{piece}",
+    }
+
+
+def chunk_disclosures(df: pd.DataFrame, splitter: RecursiveCharacterTextSplitter | None = None,
+                      attachments: list[dict] | None = None) -> list[dict]:
+    """공시 DataFrame(rcept_no·corp_code·corp_name·report_nm·rcept_dt·pblntf_ty·url·text)을 청크 dict 목록으로.
+
+    attachments: collect_attachments.load_texts() 형식. df에 있는 공시의 첨부만 쓰인다.
+    """
     splitter = splitter or make_splitter()
+    by_rcept: dict[str, list[dict]] = {}
+    for att in attachments or []:
+        by_rcept.setdefault(att["rcept_no"], []).append(att)
     chunks = []
     docs = df[df["text"].notna()].sort_values(["rcept_dt", "rcept_no"])
     for rec in docs.itertuples(index=False):
@@ -115,25 +160,16 @@ def chunk_disclosures(df: pd.DataFrame, splitter: RecursiveCharacterTextSplitter
             print(f"경고: 섹션을 찾지 못해 건너뜀 {rec.rcept_no} {rec.report_nm}")
             continue
         for s_idx, (section, section_type, body) in enumerate(sections):
-            pieces = [p.strip() for p in splitter.split_text(join_table_cells(body))]
-            pieces = [p for p in pieces if len(p) >= MIN_CHUNK_CHARS]
-            for c_idx, piece in enumerate(pieces):
-                chunks.append({
-                    "chunk_id": f"{rec.rcept_no}_{s_idx:02d}_{c_idx:03d}",
-                    "rcept_no": rec.rcept_no,
-                    "corp_code": rec.corp_code,
-                    "corp_name": rec.corp_name,
-                    "report_nm": rec.report_nm,
-                    "rcept_dt": rec.rcept_dt,
-                    "pblntf_ty": rec.pblntf_ty,
-                    "url": rec.url,
-                    "section": section,
-                    "section_type": section_type,
-                    "chunk_index": c_idx,
-                    "n_chars": len(piece),
-                    "has_hbm": bool(parse_documents.HBM_PATTERN.search(piece)),
-                    "text": f"{header(rec, section)}\n{piece}",
-                })
+            for c_idx, piece in enumerate(split_pieces(body, splitter)):
+                chunks.append(make_chunk(rec, f"{rec.rcept_no}_{s_idx:02d}_{c_idx:03d}",
+                                         section, section_type, c_idx, piece, label=section))
+        for a_idx, att in enumerate(by_rcept.get(rec.rcept_no, []), 1):
+            for page, page_text in enumerate(att["pages"], 1):
+                for c_idx, piece in enumerate(split_pieces(page_text, splitter)):
+                    chunks.append(make_chunk(
+                        rec, f"{rec.rcept_no}_a{a_idx}p{page:02d}_{c_idx:03d}", ATTACHMENT_SECTION,
+                        ATTACHMENT_SECTION_TYPE, c_idx, piece, label=attachment_label(att["file_name"], page),
+                        page=page, file_name=att["file_name"]))
     return chunks
 
 
@@ -185,7 +221,11 @@ def load_targets(db_path: Path = config.DB_PATH) -> pd.DataFrame:
 
 def main(db_path: Path = config.DB_PATH) -> list[dict]:
     targets = load_targets(db_path)
-    chunks = chunk_disclosures(targets)
+    attachments = collect_attachments.load_texts()
+    used = [a for a in attachments if a["rcept_no"] in set(targets["rcept_no"])]
+    print(f"첨부 텍스트 {len(attachments)}개 중 RAG 대상 공시의 첨부 {len(used)}개 사용"
+          + ("" if attachments else " (미수집: python -m src.dart.collect_attachments)"))
+    chunks = chunk_disclosures(targets, attachments=used)
     save_chunks(chunks)
     summary = summarize(chunks)
     SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
