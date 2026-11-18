@@ -133,3 +133,25 @@ def test_format_result_shows_refusal_and_sources():
            "location": "첨부 KOR.pdf p.5", "distance": 0.41, "url": "u"}
     r = qa_chain.QAResult("q", "답 [1]", True, None, "SK하이닉스", 1, [src])
     assert "[1] SK하이닉스 | 실적 | 2024-10-24 | 첨부 KOR.pdf p.5" in qa_chain.format_result(r)
+
+
+def test_save_and_load_samples_json(tmp_path):
+    src = {"n": 1, "corp_name": "SK하이닉스", "report_nm": "실적", "rcept_dt": "2024-10-24", "url": "u",
+           "location": "첨부 KOR.pdf p.5", "distance": 0.41, "chunk_id": "s1_a1p05_000"}
+    results = [qa_chain.QAResult("q1", "70% [1]", True, None, "SK하이닉스", 6, [src]),
+               qa_chain.QAResult("q2", qa_chain.REFUSAL, False, "관련 공시 없음 (검색 거리 기준)", None, 0)]
+    path = tmp_path / "s.json"
+    qa_chain.save_samples_json(results, {"s1_a1p05_000": "본문", "other": "x"}, path)
+    data = qa_chain.load_samples_json(path)
+    assert data["results"] == results and data["texts"] == {"s1_a1p05_000": "본문"}  # 출처 청크만 저장
+    assert data["model"] == qa_chain.config.LLM_MODEL and qa_chain.load_samples_json(tmp_path / "none.json") is None
+
+
+def test_source_texts_uses_store_get_when_available():
+    class Store:
+        def get(self, ids):
+            return {"ids": ids, "documents": [i.upper() for i in ids]}
+
+    r = qa_chain.QAResult("q", "a", True, sources=[{"chunk_id": "a"}, {"chunk_id": "b"}])
+    assert qa_chain.source_texts(Store(), [r, r]) == {"a": "A", "b": "B"}
+    assert qa_chain.source_texts(object(), [r]) == {}

@@ -1,9 +1,11 @@
 """
 공시 Q&A 화면. 저장된 벡터 DB를 조회하고 근거 공시를 함께 보여준다.
 
-- 질문 → src.rag.qa_chain.ask (하이브리드 검색 + LLM config.LLM_MODEL). 근거가 없으면 거절한다.
+- 예시 질문: 미리 저장한 답변(outputs/reports/qa_samples.json)을 바로 보여 준다. API를 부르지 않는다.
+- 직접 입력한 질문: src.rag.qa_chain.ask (하이브리드 검색 + LLM config.LLM_MODEL)로 실시간 답변. 근거가 없으면 거절한다.
+  (대시보드는 저장된 결과만 읽는 것이 원칙이지만, 자유 질문은 미리 만들어 둘 수 없어 이 경우만 예외로 둔다. 리포트 5.5)
 - 답변 아래에 근거 공시(공시명·제출일·위치·DART 링크·발췌)를 보인다.
-- 벡터 DB·API 키가 없으면 질문 대신 준비 방법을 안내한다. 아래쪽 RAG 대상 공시 목록은 DB만 있으면 보인다.
+- 벡터 DB·API 키가 없으면 직접 질문은 막고 준비 방법을 안내한다. 예시 답변과 공시 목록은 그대로 보인다.
 실행: streamlit run dashboard/app.py → 왼쪽 메뉴 '공시 QA'
 
 담당: 한도윤 (공시 분석)
@@ -34,9 +36,12 @@ summary = loader.load_eval_summary()
 qa_view.render_html(qa_view.hero_html(manifest, f"{config.REFERENCE_DATE:{config.DATE_FORMAT}}"))
 qa_view.render_html(qa_view.stats_html(manifest, summary))
 
+saved = loader.load_saved_answers()
+saved_answers = saved["answers"] if saved else {}
+saved_note = f"저장된 답변 · {saved['created_at'][:10]} 생성" if saved else None
 problems = loader.readiness(manifest)
 for p in problems:
-    st.warning(p)
+    st.warning(p + (" 예시 질문은 저장된 답변으로 볼 수 있습니다." if saved_answers else ""))
 
 # ── 질문 ──
 state = st.session_state
@@ -44,38 +49,49 @@ state.setdefault("qa_history", [])
 state.setdefault("qa_question", "")
 
 
+def push(result, texts, note=None):
+    state["qa_history"] = [(result, texts, note)] + state["qa_history"][: HISTORY_LIMIT - 1]
+
+
 def pick_example():
-    if state.get("qa_example"):
-        state["qa_question"] = state["qa_example"]
+    q = state.get("qa_example")
+    if q:
+        state["qa_question"] = q
+        if q in saved_answers:  # 저장된 답변은 누르자마자 보인다 (API 호출 없음)
+            push(*saved_answers[q], saved_note)
 
 
+st.caption("예시 질문은 미리 만들어 둔 답변을 바로 보여 주고, 직접 입력한 질문은 실시간으로 답합니다.")
 st.pills("예시 질문", [q for q, _ in qa_chain.SAMPLE_QUESTIONS], key="qa_example", on_change=pick_example)
 
 with st.form("qa_form", border=False):
-    col_q, col_b = st.columns([4, 1],vertical_alignment="bottom")
+    col_q, col_b = st.columns([4, 1], vertical_alignment="bottom")
     question = col_q.text_input("질문", key="qa_question", placeholder="예: SK하이닉스 청주 M15X 신규 시설투자 금액은?",
                                 label_visibility="collapsed")
-    submitted = col_b.form_submit_button("질문하기", type="primary", use_container_width=True, disabled=bool(problems))
+    submitted = col_b.form_submit_button("질문하기", type="primary", use_container_width=True, disabled=bool(problems) and not saved_answers)
 
-if submitted and question.strip():
+if submitted and question.strip() in saved_answers:
+    push(*saved_answers[question.strip()], saved_note)
+elif submitted and question.strip() and problems:
+    st.info("지금은 실시간 질문을 쓸 수 없습니다. 위의 예시 질문을 눌러 저장된 답변을 확인해 주세요.")
+elif submitted and question.strip():
     try:
         with st.spinner("공시에서 근거를 찾는 중…"):
             store = loader.get_store()
             result = qa_chain.ask(question.strip(), store, loader.get_llm())
             texts = loader.chunk_texts(store, [s["chunk_id"] for s in result.sources])
-        state["qa_history"] = [(result, texts)] + state["qa_history"][: HISTORY_LIMIT - 1]
+        push(result, texts)
     except Exception as e:  # API 오류 등: 키·내용은 보이지 않고 종류만 알린다
         st.error(f"답변을 만들지 못했습니다 ({type(e).__name__}). 네트워크와 API 키를 확인해 주세요.")
 elif submitted:
     st.info("질문을 입력해 주세요.")
 
 if state["qa_history"]:
-    latest, texts = state["qa_history"][0]
-    qa_view.render_result(latest, texts)
+    qa_view.render_result(*state["qa_history"][0])
     if len(state["qa_history"]) > 1:
         with st.expander(f"이전 질문 {len(state['qa_history']) - 1}개"):
-            for old, old_texts in state["qa_history"][1:]:
-                qa_view.render_result(old, old_texts)
+            for item in state["qa_history"][1:]:
+                qa_view.render_result(*item)
 
 # ── RAG 대상 공시 ──
 qa_view.render_html('<div class="qa-section">검색 대상 공시</div>')
