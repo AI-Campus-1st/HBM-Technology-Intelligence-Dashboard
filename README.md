@@ -82,9 +82,10 @@ copy .env.example .env
 | 3 | `python -m src.dart.corp_code` | 한도윤 | SK하이닉스·삼성전자 corp_code |
 | 4 | `python -m src.dart.collect_list` | 한도윤 | 공시 목록 (원본 저장) |
 | 5 | `python -m src.dart.collect_documents` | 한도윤 | 공시 원문 파일 |
+| 5-1 | `python -m src.dart.collect_attachments` | 한도윤 | 실적 공시 첨부 경영설명회 PDF(국문 27건) 수집·텍스트 추출 (4 다음. DART 웹 화면에서 받음. 공유받은 `data/raw/dart/attachments`가 있으면 `--extract`로 추출만, 네트워크 불필요) |
 | 6 | `python -m src.dart.parse_documents` | 한도윤 | 공시 텍스트 DB 적재 + 정기보고서 R&D·투자 섹션 추출 (`--sections`면 섹션만 다시: `data/processed/disclosure_sections.csv`, `outputs/reports/disclosure_section_summary.csv`·`disclosure_rnd_capex.csv`) |
-| 6-1 | `python -m src.dart.news_link` | 한도윤 | HBM 기사↔공시 연결 후보, 새 RAG 기준 미리보기 (`--apply`는 김한승과 기준 합의 후) |
-| 6-2 | `python -m src.rag.chunking` | 한도윤 | RAG 대상 공시 청크 (6-1 `--apply` 다음. `data/processed/disclosure_chunks.jsonl`, 요약 `outputs/reports/disclosure_chunk_summary.csv`) |
+| 6-1 | `python -m src.dart.news_link` | 한도윤 | HBM 기사↔공시 연결 후보, 새 RAG 기준 미리보기 (`--apply`는 김한승과 기준 합의 후. 5-1 다음이면 첨부에 HBM이 있는 실적 공시도 RAG 대상) |
+| 6-2 | `python -m src.rag.chunking` | 한도윤 | RAG 대상 공시 청크 (6-1 `--apply` 다음. 첨부는 쪽마다 청크. `data/processed/disclosure_chunks.jsonl`, 요약 `outputs/reports/disclosure_chunk_summary.csv`) |
 | 7 | `python -m src.news.preprocess` | 김한승 | 제목 중복(재배포) 표시, `news_tag` 적재 (2 다음. 7을 처음 돌리거나 다시 돌렸으면 6-1 `news_link --apply` → 6-2 `chunking`을 다시 실행해 실제 태그·중복 제외를 반영) |
 | 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
 | 7-2 | `python -m src.dart.sql_report` | 한도윤 | 공시 SQL 집계 `sql/05_*.sql` 실행 (7·6-1 `--apply` 다음. `outputs/reports/sql05_*.csv`) |
@@ -206,6 +207,7 @@ mid_project/
 | `corp_code.py` | Day 1 | `corpCode.xml`로 SK하이닉스·삼성전자 `corp_code` 확인. |
 | `collect_list.py` | Day 2 | `list.json` 공시 목록 수집 (기간 `20231019`~`20261019`, `config.DART_BGN_DE`~`DART_END_DE`). 요청 간 딜레이, 원본 저장, 재실행 시 이미 받은 건 건너뛰기. |
 | `collect_documents.py` | Day 2 | 공시서류원본파일 API로 원문 다운로드. |
+| `collect_attachments.py` | Day 4 | 실적 공시의 첨부 경영설명회 PDF(국문)를 DART 웹 화면에서 받아 쪽별 텍스트 추출 (OpenAPI zip에는 첨부가 없음). [기재정정]의 첨부는 정정 전 원래 공시 번호로 받는다. |
 | `parse_documents.py` | Day 2~3 | 원문에서 텍스트를 추출해 DB에 적재. 정기보고서를 'II. 사업의 내용' 소제목(사업·제품·투자·연구개발)과 삼성전자 연구개발실적(상세)으로 나누고, R&D 비용·매출 대비 비율·시설투자액을 뽑는다. |
 | `relevance_review.py` | Day 2~3 | 공시 관련성 표본 검수 (sample → 라벨 → score). |
 | `issue_evidence.py` | Day 3 | 급증 구간(`issues`)별 근거 공시 후보: 구간 안 기사와 연결된 공시(`키워드`) + 구간 안 사건성 공시(`기간`). 사람 확인 결과(`data/labels/issue_evidence_review_v1.csv`)를 반영해 `issue_evidence`를 다시 쓴다. |

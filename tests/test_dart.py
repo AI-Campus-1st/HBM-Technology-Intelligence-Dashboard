@@ -499,3 +499,87 @@ def test_earnings_only_links_do_not_select_rag():
     res = news_link.new_rag_target(disclosures, links).set_index("rcept_no")
     assert res.loc["e1", "new_rag_target"] == 0 and res.loc["e1", "link_excluded_only"]
     assert res.loc["i1", "new_rag_target"] == 1
+
+
+def test_new_rag_target_adds_disclosures_with_hbm_attachment():
+    articles, disclosures = make_link_inputs()
+    links = news_link.link(articles, disclosures)
+    res = news_link.new_rag_target(disclosures, links, {"b1", "i4"}).set_index("rcept_no")
+    assert res.loc["b1", "new_rag_target"] == 1 and res.loc["b1", "by_attachment"]
+    assert res.loc["b1", "new_reason"] is None
+    assert res.loc["i4", "new_rag_target"] == 0  # 원문(본 문서)이 없는 공시는 첨부가 있어도 대상이 아니다
+
+
+def test_attachment_hbm_rcept_nos_uses_hbm_count():
+    records = [{"rcept_no": "r1", "n_hbm": 3}, {"rcept_no": "r2", "n_hbm": 0}]
+    assert news_link.attachment_hbm_rcept_nos(records) == {"r1"}
+
+
+# ── collect_attachments (실적 공시 첨부 경영설명회 PDF) ──
+
+from src.dart import collect_attachments as ca  # noqa: E402
+
+VIEWER_HTML = """
+<select id="family"><option value="rcpNo=20241031800030">본문</option></select>
+<select id="att" class="w01" onchange="changeAtt(this.value)">
+    <option value="null">+첨부선택+</option>
+    <option value="rcpNo=20241008800067&amp;dcmNo=10137085" >
+        2024.10.08&nbsp;
+        기타공시첨부서류
+    </option>
+</select>
+"""
+
+DOWNLOAD_HTML = """
+<td class="tL">[삼성전자]기타공시첨부서류(2024.10.08).zip</td>
+<td><a class="btnFile" href="/pdf/download/zip.do?rcp_no=1&dcm_no=2"></a></td>
+<td class="tL">3Q24_Earnings Presentation_ENG.pdf</td>
+<td>
+    <a class="btnFile" href="/pdf/download/file.do?rcp_no=1&dcm_id=90999&dcm_seq=104&fl_nm=3Q24_ENG.pdf">
+<td class="tL">[삼성전자] &#39;24.3분기 잠정실적 설명 자료.pdf</td>
+<td>
+    <a class="btnFile" href="/pdf/download/file.do?rcp_no=1&amp;dcm_seq=046&fl_nm=KOR.pdf">
+"""
+
+
+def test_parse_attachment_options_keeps_attachment_rcept_no():
+    # [기재정정] 화면의 첨부는 정정 전 원래 공시(다른 접수번호)에 붙어 있다
+    assert ca.parse_attachment_options(VIEWER_HTML) == [("20241008800067", "10137085", "2024.10.08 기타공시첨부서류")]
+    assert ca.parse_attachment_options("<select id=\"doc\"></select>") == []
+
+
+def test_parse_file_links_skips_bundle_zip():
+    files = ca.parse_file_links(DOWNLOAD_HTML)
+    assert [name for name, _ in files] == ["3Q24_Earnings Presentation_ENG.pdf", "[삼성전자] '24.3분기 잠정실적 설명 자료.pdf"]
+    assert files[1][1] == "/pdf/download/file.do?rcp_no=1&dcm_seq=046&fl_nm=KOR.pdf"
+
+
+@pytest.mark.parametrize("name, expected", [
+    ("3Q24_Earnings Presentation_KOR.pdf", (True, "국문PDF")),
+    ("삼성전자 실적발표 '25.2분기.pdf", (True, "국문PDF")),
+    ("3Q24_Earnings Presentation_ENG.pdf", (False, "영문")),
+    ("Earnings_English.PDF", (False, "영문")),
+    ("실적.xlsx", (False, "PDF아님")),
+])
+def test_select_file(name, expected):
+    assert ca.select_file(name) == expected
+
+
+def test_local_name_and_clean_page():
+    assert ca.local_name("r1", "9", "[삼성전자] '24.3분기 자료.pdf") == "r1_9_[삼성전자]_'24.3분기_자료.pdf"
+    assert ca.clean_page("  HBM   매출 \n\n\x00 QoQ +70% \n") == "HBM 매출\nQoQ +70%"
+
+
+def test_extract_all_skips_missing_files(tmp_path, monkeypatch):
+    listing = pd.DataFrame([
+        {"rcept_no": "r1", "att_rcept_no": "r0", "dcm_no": "9", "file_name": "a.pdf", "rcept_dt": "2024-10-31", "selected": 1},
+        {"rcept_no": "r2", "att_rcept_no": "r2", "dcm_no": "8", "file_name": "b.pdf", "rcept_dt": "2024-10-24", "selected": 1},
+        {"rcept_no": "r3", "att_rcept_no": "r3", "dcm_no": "7", "file_name": "c_ENG.pdf", "rcept_dt": "2024-10-24", "selected": 0},
+    ])
+    (tmp_path / ca.local_name("r1", "9", "a.pdf")).write_bytes(b"%PDF")
+    monkeypatch.setattr(ca, "extract_pdf", lambda path: ["HBM 매출", "HBM3E 12단 hbm"])
+    records = ca.extract_all(listing, att_dir=tmp_path)
+    assert [(r["rcept_no"], r["att_rcept_no"], r["n_pages"], r["n_hbm"]) for r in records] == [("r1", "r0", 2, 3)]
+    ca.save_texts(records, tmp_path / "t.jsonl")
+    assert ca.load_texts(tmp_path / "t.jsonl") == records
+    assert ca.load_texts(tmp_path / "없음.jsonl") == []

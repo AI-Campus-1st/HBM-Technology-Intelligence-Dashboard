@@ -38,7 +38,7 @@
 | 데이터 | 만드는 사람 | 공유 방법 |
 |---|---|---|
 | 뉴스 CSV (`data/raw/news/`) | 제공 | 둘 다 같은 제공 파일 사용 (`config.NEWS_CSV`) |
-| DART 원본 (`data/raw/dart/`) | 한도윤 | 수집 후 폴더를 zip으로 공유 드라이브에 올림. 김한승은 풀어서 `parse_documents`만 실행 (API 키·호출 불필요) |
+| DART 원본 (`data/raw/dart/`) | 한도윤 | 수집 후 폴더를 zip으로 공유 드라이브에 올림. 김한승은 풀어서 `parse_documents`만 실행 (API 키·호출 불필요). 첨부 PDF(`data/raw/dart/attachments/`)도 같은 zip에 넣는다. 받은 쪽은 `collect_attachments --extract`로 텍스트만 추출 |
 | LLM 분류 결과 | 김한승 | 다시 만들면 비용이 들고 결과가 달라지므로 `data/processed/`에 파일(CSV 등)로 저장해 공유. DB 적재는 그 파일을 읽어서 한다 |
 | 벡터 DB (`data/vectordb/`) | 한도윤 | 공유 드라이브로 전달 |
 
@@ -48,5 +48,5 @@
 1. `git pull origin main`, 상대가 올린 원본(DART zip, LLM 결과 파일)을 받아 같은 경로에 둔다.
 2. `python -m src.common.db --rebuild` 후 README 실행 순서대로 다시 적재한다.
 3. `python -m src.common.db --check` 출력을 서로 비교한다. **테이블별 행 수와 기본키 지문이 같고 FK 위반이 0건**이면 같은 DB다.
-   - 지문은 기본키만 보므로 값의 차이는 잡지 못한다. 그래서 `disclosure.rag_target`은 RAG 대상 건수(75건)로, `issue_evidence.verified`는 `python -m src.dart.issue_evidence` 출력의 '사람 확인 N행'으로 따로 맞춰 본다.
+   - 지문은 기본키만 보므로 값의 차이는 잡지 못한다. 그래서 `disclosure.rag_target`은 RAG 대상 건수(101건, 첨부 반영 전 75건)로, `issue_evidence.verified`는 `python -m src.dart.issue_evidence` 출력의 '사람 확인 N행'으로 따로 맞춰 본다.
 4. 다르면 어느 테이블이 다른지 보고 그 테이블 담당자가 입력 파일·코드 버전을 확인한다. 결과를 작업 일지에 적는다.
