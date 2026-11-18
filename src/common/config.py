@@ -38,6 +38,11 @@ load_dotenv(ROOT_DIR / ".env")
 DART_API_KEY = os.getenv("DART_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+# ── LLM 모델 (프로젝트 공통) ──
+# 감성·이슈 분석(src/llm)과 공시 Q&A(src/rag/qa_chain) 모두 이 모델을 쓴다 (2026-11-18 결정).
+# 임베딩 모델은 src/rag/build_index.EMBEDDING_MODEL (text-embedding-3-small)
+LLM_MODEL = "gpt-6-luna"
+
 
 def require_env(name: str) -> str:
     """필수 환경변수를 읽는다. 비어 있으면 어떤 키가 없는지 알려주고 멈춘다 (값은 출력하지 않는다)."""
