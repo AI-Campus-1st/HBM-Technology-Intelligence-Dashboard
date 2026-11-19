@@ -6,7 +6,7 @@ spike_detection 코드(김한승 담당)는 건드리지 않고, 이 모듈을 �
 
 점검 (check):
 - 라벨 파일의 issue_id가 issues와 같은가 (빠진 구간·없는 구간)
-- status가 미작성/초안/확정 중 하나이고, 초안·확정이면 summary가 있는가
+- status가 미작성/초안/확정/제외 중 하나이고, 초안·확정이면 summary가, 제외면 note(제외 이유)가 있는가
 - evidence_rcept_no가 모두 그 구간의 사람이 확인한 근거(issue_evidence verified=1)인가
 - 그 구간의 확인된 근거 중 요약에 안 쓴 것 (경고만)
 
@@ -29,7 +29,7 @@ import pandas as pd
 from src.common import config
 
 SUMMARY_PATH = config.LABELS_DIR / "issue_summary_v1.csv"
-STATUSES = ("미작성", "초안", "확정")
+STATUSES = ("미작성", "초안", "확정", "제외")  # 제외: 탐지됐지만 분석 대상에서 뺀 구간 (이유는 note, 리포트 3.5)
 
 
 def load_summaries(path: Path | None = None) -> pd.DataFrame:
@@ -59,6 +59,8 @@ def check(summaries: pd.DataFrame, issue_ids: list[str], verified: pd.DataFrame)
             problems.append(f"{r.issue_id}: status '{r.status}'는 {'/'.join(STATUSES)} 중 하나여야 함")
         if r.status in ("초안", "확정") and not r.summary:
             problems.append(f"{r.issue_id}: {r.status}인데 summary가 비어 있음")
+        if r.status == "제외" and not r.note:
+            problems.append(f"{r.issue_id}: 제외인데 note(제외 이유)가 비어 있음")
         used = evidence_ids(r.evidence_rcept_no)
         for rno in used:
             if rno not in ok.get(r.issue_id, set()):
