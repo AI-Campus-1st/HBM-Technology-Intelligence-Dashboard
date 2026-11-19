@@ -95,8 +95,9 @@ copy .env.example .env
 | 8-2 | `python -m src.eda.news_sql_report` | 김한승 | 뉴스 SQL 집계 `sql/01~03_*.sql` 실행 (8 다음 — 03이 `issues`를 읽음. `outputs/reports/sql01~03_*.csv`) |
 | 9 | `python -m src.llm.classify` | 김한승 | 감성·이슈 분석 결과 |
 | 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB `data/vectordb/` (6-2 다음. OpenAI 임베딩 호출, `--dry-run`은 토큰 수만, `--query "질문"`은 검색만. 김한승은 실행하지 않고 공유 드라이브의 vectordb zip을 풀어 쓴다) |
-| 10-1 | `python -m src.rag.qa_chain "질문"` | 한도윤 | 공시 근거 질의응답 (10 다음. `--samples`는 예시 질문 9개 → `outputs/reports/qa_samples.csv`, 대시보드용 저장 답변 `qa_samples.json`. LLM은 `config.LLM_MODEL`) |
+| 10-1 | `python -m src.rag.qa_chain "질문"` | 한도윤 | 공시 근거 질의응답 (10 다음. `--samples`는 예시 질문 9개 → `outputs/reports/qa_samples.csv`, 대시보드용 저장 답변 `qa_samples.json`. LLM은 `config.LLM_MODEL`. `--rerank`는 재정렬 모델 사용, 아래 10-3) |
 | 10-2 | `python -m src.rag.evaluate` | 한도윤 | 공시 Q&A 평가 (10-1 다음. 평가 질문 `data/labels/qa_eval_v1.csv` 24문항 → `outputs/reports/qa_eval_v1.csv`·`qa_eval_v1_summary.csv`. 질문마다 LLM 1회) |
+| 10-3 | (선택) `pip install -r requirements/rerank.txt` 후 `python -m src.rag.evaluate --rerank`, `python -m src.rag.qa_chain --samples --rerank` | 한도윤 | 교차 인코더 재정렬(`BAAI/bge-reranker-v2-m3`, 약 2.3GB). 결과는 `qa_eval_v1_rerank*.csv`, `--version v2`는 확인용 평가 질문 `qa_eval_v2.csv`. CPU에서 질문당 약 40초(평가 v1 약 22분, 예시 약 9분). 리포트 5.4 |
 | 11 | `streamlit run dashboard/app.py` | 공동 | 대시보드 실행 |
 
 > 2·7·9(김한승)와 3~6·10(한도윤)은 서로 독립이라 병행할 수 있습니다.
@@ -170,6 +171,7 @@ mid_project/
 | `requirements/common.txt` | [공동] pandas, plotly, streamlit 등 공통 패키지. 추가 시 합의. |
 | `requirements/issue.txt` | [김한승] LLM 분석에 필요한 패키지. 김한승만 수정한다. |
 | `requirements/disclosure.txt` | [한도윤] DART 수집·LangChain·벡터 DB 패키지. 한도윤만 수정한다. |
+| `requirements/rerank.txt` | [한도윤] 선택 설치: 공시 Q&A 재정렬 모델(sentence-transformers, torch 포함). `requirements.txt`에 넣지 않는다. |
 | `.env.example` | 필요한 환경변수 이름만 적은 견본. 복사해 `.env`를 만든다. |
 | `.gitignore` | `.env`, `data/` 내용물, 캐시 등을 git에서 제외해 키 노출과 대용량 충돌을 막는다. |
 | `.gitattributes` | 줄바꿈을 LF로 통일해 Windows/Mac 간 "내용은 같은데 전부 바뀐" 충돌을 막는다. |
@@ -251,7 +253,7 @@ mid_project/
 |---|---|---|
 | `chunking.py` | Day 3 | RAG 대상 공시를 청크(1,000자, 겹침 150자)로 나누고 공시명·제출일·링크·섹션 메타데이터를 붙인다. 정기보고서는 사업·제품·투자·연구개발 섹션만, 표는 행 단위로 묶어서 자른다. |
 | `build_index.py` | Day 5 | 청크를 `text-embedding-3-small`로 임베딩해 Chroma(`data/vectordb`, 컬렉션 `disclosure_chunks`)에 **미리 저장**. `manifest.json`에 모델·청크 수·청크 지문을 남겨 공유본을 맞춰 본다. |
-| `qa_chain.py` | Day 5 | 공시 근거 질의응답. 기업 필터(비교 질문은 기업별 검색) → 벡터 후보 40개 + 키워드(BM25) RRF 재정렬 → `gpt-6-luna` 구조화 답변. 출처(공시명·제출일·링크·첨부 쪽)를 붙이고, 검색 거리 기준·LLM 판단으로 근거가 없으면 거절한다. |
+| `qa_chain.py` | Day 5 | 공시 근거 질의응답. 기업 필터(비교 질문은 기업별 검색) → 벡터 후보 40개 + 키워드(BM25) RRF 재정렬 → `gpt-6-luna` 구조화 답변. 출처(공시명·제출일·링크·첨부 쪽)를 붙이고, 검색 거리 기준·LLM 판단으로 근거가 없으면 거절한다. 선택: 교차 인코더 재정렬(`--rerank`, 대시보드 '정밀 검색'). |
 | `evaluate.py` | Day 5 | 평가 질문(정답 근거·핵심 사실)으로 검색 적중(하이브리드 vs 벡터만)·답변 정확·거절 정확·위임장(D) 비중·거리 분포를 잰다. |
 
 ### `dashboard/` — Streamlit

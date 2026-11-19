@@ -46,6 +46,9 @@ from src.rag import build_index
 K = 6
 POOL = 40  # 벡터 검색 후보 수 (이 안에서 키워드 점수로 다시 순위를 매긴다)
 RRF_K = 60  # Reciprocal Rank Fusion 상수 (관례값)
+# 교차 인코더 재정렬 (선택, requirements/rerank.txt). 후보 POOL개를 질문과 한 쌍씩 다시 채점한다 (리포트 5.4)
+RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
+RERANK_MAX_LENGTH = 512
 # cosine 거리 상한. 공시 질문의 관련 청크는 0.3~0.6, 공시와 무관한 질문은 이보다 멀다 (2026-11-18 표본 확인, 리포트 5.3)
 MAX_DISTANCE = 0.65
 REFUSAL = "제공된 공시 자료에서 근거를 찾을 수 없어 답변할 수 없습니다."
@@ -115,17 +118,26 @@ def source_info(n: int, doc, distance: float) -> dict:
 
 _HEADER = re.compile(r"^\[[^\]]*\]\n")
 _WORD = re.compile(r"[0-9A-Za-z]+|[가-힣]+")
+# 숫자+단위 ('16단', '2025년', '3분기', '12H'): 숫자와 단위를 떼면 '16'·'단'만 남아 핵심 단서가 사라진다
+_NUM_UNIT = re.compile(r"(?<![0-9A-Za-z.])(\d+(?:\.\d+)?)([가-힣]{1,2}|[A-Za-z]{1,4})")
 
 
 def keyword_tokens(text: str) -> list[str]:
     """키워드 점수용 토큰. 청크 머리말은 빼고, 한글 단어는 2글자씩 겹쳐 자른다 ('판매가' → 판매·매가).
-    조사가 붙어도('판매가'·'판매') 같은 2글자가 남아 맞는다. 영문·숫자는 소문자 단어 그대로."""
+    조사가 붙어도('판매가'·'판매') 같은 2글자가 남아 맞는다. 영문·숫자는 소문자 단어 그대로.
+    숫자+단위('16단', '2025년', '12H')는 붙은 채로 토큰을 하나 더 넣는다 (2026-11-18, 리포트 5.4)."""
+    body = _HEADER.sub("", text)
     out: list[str] = []
-    for w in _WORD.findall(_HEADER.sub("", text)):
+    for w in _WORD.findall(body):
         if "가" <= w[0] <= "힣":
             out += [w] if len(w) == 1 else [w[i:i + 2] for i in range(len(w) - 1)]
         else:
             out.append(w.lower())
+    for num, unit in _NUM_UNIT.findall(body):
+        if "가" <= unit[0] <= "힣":  # 한글 단위는 1글자·2글자 둘 다 ('16단을' → 16단·16단을, '3분기' → 3분·3분기)
+            out += [num + unit[:1]] + ([num + unit] if len(unit) == 2 else [])
+        else:
+            out.append((num + unit).lower())
     return out
 
 
@@ -157,23 +169,64 @@ def rrf_order(vector_rank_scores: list[float]) -> list[int]:
     return sorted(fused, key=lambda i: (-fused[i], i))
 
 
-def retrieve_for_question(question: str, store, k: int = K, max_distance: float = MAX_DISTANCE) -> list[tuple]:
+class CrossEncoderReranker:
+    """질문·청크 쌍을 함께 읽고 관련도를 채점하는 교차 인코더 (sentence-transformers CrossEncoder)."""
+
+    def __init__(self, model: str = RERANK_MODEL, max_length: int = RERANK_MAX_LENGTH):
+        from sentence_transformers import CrossEncoder
+
+        self.model = CrossEncoder(model, max_length=max_length)
+
+    def scores(self, query: str, texts: list[str]) -> list[float]:
+        if not texts:
+            return []
+        return [float(s) for s in self.model.predict([(query, t) for t in texts], batch_size=8)]
+
+
+def load_reranker():
+    """재정렬 모델. 패키지가 없으면 None (그때는 RRF 순서를 그대로 쓴다)."""
+    try:
+        return CrossEncoderReranker()
+    except ImportError:
+        return None
+
+
+def retrieve_for_question(question: str, store, k: int = K, max_distance: float = MAX_DISTANCE,
+                          reranker=None) -> list[tuple]:
     """질문의 기업 수에 따라 검색한다: 한 기업 → 그 기업만, 두 기업 → 기업별 k/2개씩 번갈아, 없음 → 전체."""
+    return merge_ranked(retrieve_ranked(question, store, k, max_distance, reranker), k)
+
+
+def retrieve_ranked(question: str, store, k: int = K, max_distance: float = MAX_DISTANCE,
+                    reranker=None) -> list[list[tuple]]:
+    """검색 대상(기업)별로 후보 전체를 순위대로 정렬한 목록. 후보 수가 같으면 결과가 k와 무관하므로,
+    한 번 재정렬한 결과를 여러 k에 나눠 쓸 수 있다 (평가: 검색 지표 POOL개와 답변 K개, 리포트 5.4)."""
     companies = detect_companies(question)
-    if len(companies) < 2:
-        return retrieve(question, store, k, detect_company(question), max_distance)
-    per = [retrieve(question, store, math.ceil(k / len(companies)), c, max_distance) for c in companies]
+    targets = companies if len(companies) >= 2 else [detect_company(question)]
+    pool = max(POOL, math.ceil(k / len(targets)))
+    return [retrieve(question, store, pool, c, max_distance, pool=pool, reranker=reranker) for c in targets]
+
+
+def merge_ranked(groups: list[list[tuple]], k: int = K) -> list[tuple]:
+    """retrieve_ranked 결과에서 상위 k개. 여러 기업이면 기업별 k/n개씩 번갈아 놓는다."""
+    if len(groups) == 1:
+        return groups[0][:k]
+    per = [g[:math.ceil(k / len(groups))] for g in groups]
     merged = [r for group in zip(*[p + [None] * (k - len(p)) for p in per]) for r in group if r is not None]
     return merged[:k]
 
 
 def retrieve(question: str, store, k: int = K, company: str | None = None,
-             max_distance: float = MAX_DISTANCE, pool: int = POOL) -> list[tuple]:
-    """(Document, 벡터 거리) 목록 k개. 기업 필터 → 벡터 후보 pool개(거리 상한 적용) → 키워드 점수와 RRF로 재정렬."""
+             max_distance: float = MAX_DISTANCE, pool: int = POOL, reranker=None) -> list[tuple]:
+    """(Document, 벡터 거리) 목록 k개. 기업 필터 → 벡터 후보 pool개(거리 상한 적용) → 키워드 점수와 RRF로 재정렬.
+    reranker가 있으면 후보 전체를 교차 인코더 점수로 다시 정렬한다 (동점이면 RRF 순서)."""
     flt = {"corp_name": company} if company else None
     results = store.similarity_search_with_score(question, k=max(pool, k), filter=flt)
     results = [(doc, dist) for doc, dist in results if dist <= max_distance]
     order = rrf_order(bm25_scores(question, [doc.page_content for doc, _ in results]))
+    if reranker is not None and order:
+        ce = reranker.scores(question, [results[i][0].page_content for i in order])
+        order = [i for _, _, i in sorted(zip(ce, range(len(order)), order), key=lambda x: (-x[0], x[1]))]
     return [results[i] for i in order[:k]]
 
 
@@ -197,11 +250,14 @@ def generate(question: str, results: list[tuple], llm) -> Answer:
     return llm.invoke(messages)
 
 
-def ask(question: str, store=None, llm=None, k: int = K, max_distance: float = MAX_DISTANCE) -> QAResult:
-    """질문 하나에 답한다. store·llm을 넘기면 그것을 쓴다 (테스트·대시보드에서 재사용)."""
+def ask(question: str, store=None, llm=None, k: int = K, max_distance: float = MAX_DISTANCE,
+        reranker=None, results: list[tuple] | None = None) -> QAResult:
+    """질문 하나에 답한다. store·llm을 넘기면 그것을 쓴다 (테스트·대시보드에서 재사용).
+    results(검색 결과)를 넘기면 검색을 건너뛴다 (평가에서 같은 재정렬을 두 번 하지 않으려고)."""
     company = " · ".join(detect_companies(question)) or None
-    store = store if store is not None else build_index.open_store()
-    results = retrieve_for_question(question, store, k, max_distance)
+    if results is None:
+        store = store if store is not None else build_index.open_store()
+        results = retrieve_for_question(question, store, k, max_distance, reranker=reranker)
     if not results:
         return QAResult(question, REFUSAL, False, "관련 공시 없음 (검색 거리 기준)", company, 0)
 
@@ -251,13 +307,13 @@ def source_texts(store, results: list[QAResult]) -> dict[str, str]:
     return dict(zip(got["ids"], got["documents"]))
 
 
-def save_samples_json(results: list[QAResult], texts: dict[str, str], path=None) -> dict:
+def save_samples_json(results: list[QAResult], texts: dict[str, str], path=None, reranker: str | None = None) -> dict:
     """예시 답변을 JSON으로 저장한다. 대시보드는 이 파일을 읽어 API 호출 없이 예시 답변을 보여 준다."""
     manifest = build_index.MANIFEST_PATH
     fingerprint = json.loads(manifest.read_text(encoding="utf-8")).get("chunks_fingerprint") if manifest.exists() else None
     data = {
         "created_at": datetime.now().isoformat(timespec="seconds"), "model": config.LLM_MODEL,
-        "embedding_model": build_index.EMBEDDING_MODEL, "chunks_fingerprint": fingerprint,
+        "embedding_model": build_index.EMBEDDING_MODEL, "chunks_fingerprint": fingerprint, "reranker": reranker,
         "results": [asdict(r) for r in results],
         "texts": {cid: texts[cid] for r in results for cid in (s["chunk_id"] for s in r.sources) if cid in texts},
     }
@@ -277,12 +333,12 @@ def load_samples_json(path=None) -> dict | None:
     return data
 
 
-def run_samples(store=None, llm=None, json_path=None) -> pd.DataFrame:
+def run_samples(store=None, llm=None, json_path=None, reranker=None) -> pd.DataFrame:
     store = store if store is not None else build_index.open_store()
     llm = llm if llm is not None else make_llm()
     rows, results = [], []
     for q, expected in SAMPLE_QUESTIONS:
-        r = ask(q, store, llm)
+        r = ask(q, store, llm, reranker=reranker)
         results.append(r)
         print(format_result(r) + "\n")
         rows.append({
@@ -297,7 +353,8 @@ def run_samples(store=None, llm=None, json_path=None) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     SAMPLES_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(SAMPLES_PATH, index=False, encoding="utf-8-sig")
-    save_samples_json(results, source_texts(store, results), json_path)
+    save_samples_json(results, source_texts(store, results), json_path,
+                      RERANK_MODEL if reranker is not None else None)
     print(f"기대와 같음 {int((df['expected'] == df['result']).sum())}/{len(df)}  "
           f"저장: {SAMPLES_PATH}, {json_path or SAMPLES_JSON_PATH}")
     return df
@@ -308,10 +365,14 @@ if __name__ == "__main__":
     parser.add_argument("question", nargs="?", help="질문")
     parser.add_argument("--samples", action="store_true", help="예시 질문 묶음 실행 → qa_samples.csv·qa_samples.json")
     parser.add_argument("-k", type=int, default=K)
+    parser.add_argument("--rerank", action="store_true", help="교차 인코더 재정렬 사용 (requirements/rerank.txt)")
     args = parser.parse_args()
+    rr = load_reranker() if args.rerank else None
+    if args.rerank and rr is None:
+        parser.error("재정렬 모델을 불러오지 못했습니다: pip install -r requirements/rerank.txt")
     if args.samples:
-        run_samples()
+        run_samples(reranker=rr)
     elif args.question:
-        print(format_result(ask(args.question, k=args.k)))
+        print(format_result(ask(args.question, k=args.k, reranker=rr)))
     else:
         parser.error("질문을 입력하거나 --samples를 쓰세요")

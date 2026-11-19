@@ -155,3 +155,67 @@ def test_source_texts_uses_store_get_when_available():
     r = qa_chain.QAResult("q", "a", True, sources=[{"chunk_id": "a"}, {"chunk_id": "b"}])
     assert qa_chain.source_texts(Store(), [r, r]) == {"a": "A", "b": "B"}
     assert qa_chain.source_texts(object(), [r]) == {}
+
+
+def test_keyword_tokens_keep_number_with_unit():
+    toks = qa_chain.keyword_tokens("[머리말]\nHBM3E 16단을 2025년 3분기 12H")
+    assert {"16단", "16단을", "2025년", "3분기", "12h"} <= set(toks)
+    assert "3e" not in toks  # 'HBM3E' 안의 숫자는 숫자+단위로 보지 않는다
+
+
+class FakeReranker:
+    """정해 둔 단어가 들어 있는 청크에 높은 점수를 주는 재정렬 흉내."""
+
+    def __init__(self, word):
+        self.word, self.calls = word, []
+
+    def scores(self, query, texts):
+        self.calls.append(len(texts))
+        return [1.0 if self.word in t else 0.0 for t in texts]
+
+
+def test_retrieve_with_reranker_reorders_whole_pool(docs):
+    store = FixedStore([(docs["m2_00_000"], 0.40), (docs["m1_a1p08_000"], 0.45), (docs["m3_00_000"], 0.50)])
+    rr = FakeReranker("샘플")
+    got = qa_chain.retrieve("HBM 판매 감소", store, k=2, company="삼성전자", reranker=rr)
+    assert [d.id for d, _ in got] == ["m3_00_000", "m1_a1p08_000"]  # 재정렬 1위, 나머지는 RRF 순서
+    assert rr.calls == [3]  # 후보 전체를 채점한다
+
+
+def test_ask_passes_reranker(docs):
+    store = FixedStore([(docs["m2_00_000"], 0.40), (docs["m3_00_000"], 0.50)])
+    llm = FakeLLM(qa_chain.Answer(answerable=True, answer="샘플 [1]", used_sources=[1]))
+    r = qa_chain.ask("삼성전자 HBM", store, llm, reranker=FakeReranker("샘플"))
+    assert r.sources[0]["chunk_id"] == "m3_00_000"
+
+
+def test_load_reranker_returns_none_without_package(monkeypatch):
+    import builtins
+
+    real = builtins.__import__
+
+    def fake(name, *a, **kw):
+        if name.startswith("sentence_transformers"):
+            raise ImportError
+        return real(name, *a, **kw)
+
+    monkeypatch.setattr(builtins, "__import__", fake)
+    assert qa_chain.load_reranker() is None
+
+
+def test_retrieve_ranked_matches_retrieve_for_question_at_any_k(docs):
+    # 한 번 정렬한 결과를 k마다 잘라 써도 k마다 따로 검색한 결과와 같다 (평가의 재정렬 1회 근거)
+    store = FixedStore([(docs[i], 0.4) for i in ("s1_a1p05_000", "s2_00_000", "m1_a1p08_000",
+                                                  "m3_00_000", "m2_00_000")])
+    for q in ("SK하이닉스와 삼성전자 HBM 비교", "삼성전자 HBM 판매", "HBM 전망"):
+        groups = qa_chain.retrieve_ranked(q, store, qa_chain.POOL, reranker=FakeReranker("샘플"))
+        for k in (1, 2, 3, 6, qa_chain.POOL):
+            want = qa_chain.retrieve_for_question(q, store, k, reranker=FakeReranker("샘플"))
+            assert [d.id for d, _ in qa_chain.merge_ranked(groups, k)] == [d.id for d, _ in want]
+
+
+def test_ask_uses_given_results_without_searching(docs):
+    store = FixedStore([])
+    llm = FakeLLM(qa_chain.Answer(answerable=True, answer="샘플 [1]", used_sources=[1]))
+    r = qa_chain.ask("삼성전자 HBM", store, llm, results=[(docs["m3_00_000"], 0.5)])
+    assert r.sources[0]["chunk_id"] == "m3_00_000" and store.filters == []
