@@ -10,6 +10,11 @@
 버전 기록 (바꿀 때마다 PROMPT_VERSION을 올리고 아래에 이유를 남긴다. news_analysis는 버전별로 따로 저장된다):
 - sent_v1 (Day 4): 라벨 정의 + 판정 규칙 6개 + 본문 앞 1,500자. 근거: HBM 기사 385건 본문 중앙값 1,778자,
   핵심 사실이 앞에 오는 기사 구조라는 가정(표본 검수에서 확인). 본문 입력은 전체 본문 합계(791,489자, 평균 2,056자·최대 12,047자)보다 35% 적은 516,934자.
+- sent_v2 (Day 5): 표본 50건 검수(리포트 4.5·4.6)에서 확인한 두 오류 유형을 고쳤다.
+  ① 본문 잘림: 기업이 긴 기사 뒤쪽에만 나오면 '해당없음'으로 판정(SK 4·삼성 3건) → 본문 6,000자 (기사 98.2%를 끝까지, 입력 780,570자 +51%)
+  ② 업계 공통 악재를 중립으로: 미국 수출 규제처럼 'K반도체' 전체 기사에서 사람은 부정, LLM은 중립(SK 4건)
+     → 규칙 7 추가: 기사가 업계 전체의 사건이 그 기업에도 영향을 준다고 서술하면 그 영향으로 판정
+  나머지(라벨 정의·판정 규칙 1~6·출력 형식)는 v1과 같다. v1 프롬프트는 PROMPTS에 그대로 남겨 재현할 수 있다.
 
 담당: 김한승 (이슈 분석)
 일정: Day 4
@@ -18,12 +23,11 @@
 import json
 import re
 
-PROMPT_VERSION = "sent_v1"
+PROMPT_VERSION = "sent_v2"  # 현재 버전 (classify 기본값)
 LABELS = ("긍정", "중립", "부정", "해당없음")
-MAX_CONTENT_CHARS = 1500  # 본문 앞부분만 넣는다 (위 버전 기록 참고)
 MAX_KEYWORDS = 5
 
-SYSTEM_PROMPT = """당신은 증권사 반도체 담당 애널리스트를 돕는 뉴스 분석가입니다.
+_SYSTEM_V1 = """당신은 증권사 반도체 담당 애널리스트를 돕는 뉴스 분석가입니다.
 HBM(고대역폭 메모리) 관련 기사 한 건을 읽고, SK하이닉스와 삼성전자 각각의 HBM 사업 관점에서 감성을 판정합니다.
 
 [라벨 정의 — 해당 기업의 HBM 사업 관점]
@@ -44,12 +48,26 @@ HBM(고대역폭 메모리) 관련 기사 한 건을 읽고, SK하이닉스와 �
 설명 없이 아래 JSON 하나만 출력합니다.
 {"sentiment_skh": "긍정|중립|부정|해당없음", "sentiment_sec": "긍정|중립|부정|해당없음", "issue_keywords": ["...", "..."]}"""
 
+_RULE_7 = """7. 수출 규제·정책·금리·업황처럼 업계 전체에 걸친 사건이라도, 기사가 그 기업(또는 그 기업을 포함한 '한국 메모리 업체', 'K반도체')이 영향을 받는다고 서술하면 그 영향의 방향으로 판정합니다 (예: "미국 대중 HBM 수출 통제로 삼성·SK 타격 우려" → 두 기업 모두 부정). 기사에 영향 서술이 없으면 규칙 3·5를 따릅니다.
+"""
+_SYSTEM_V2 = _SYSTEM_V1.replace("\n\n[출력 형식]", "\n" + _RULE_7.rstrip("\n") + "\n\n[출력 형식]")
 
-def build_messages(title: str, content: str | None, max_chars: int = MAX_CONTENT_CHARS) -> list[dict]:
-    """Chat Completions용 메시지. 본문은 앞 max_chars자만 넣는다 (없으면 제목만)."""
-    body = (content or "").strip()[:max_chars]
-    user = f"[제목]\n{title.strip()}\n\n[본문 앞부분]\n{body if body else '(본문 없음)'}"
-    return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}]
+# 버전별 프롬프트와 본문 길이. 지난 버전도 지우지 않는다 (news_analysis에 버전별 결과가 남아 있어 재현·비교에 필요).
+PROMPTS = {
+    "sent_v1": {"system": _SYSTEM_V1, "max_chars": 1500, "body_label": "본문 앞부분"},
+    "sent_v2": {"system": _SYSTEM_V2, "max_chars": 6000, "body_label": "본문"},
+}
+SYSTEM_PROMPT = PROMPTS[PROMPT_VERSION]["system"]
+MAX_CONTENT_CHARS = PROMPTS[PROMPT_VERSION]["max_chars"]
+
+
+def build_messages(title: str, content: str | None, max_chars: int | None = None,
+                   version: str = PROMPT_VERSION) -> list[dict]:
+    """Chat Completions용 메시지. 본문은 앞 max_chars자(기본: 버전별 길이)만 넣는다 (없으면 제목만)."""
+    spec = PROMPTS[version]
+    body = (content or "").strip()[:max_chars or spec["max_chars"]]
+    user = f"[제목]\n{title.strip()}\n\n[{spec['body_label']}]\n{body if body else '(본문 없음)'}"
+    return [{"role": "system", "content": spec["system"]}, {"role": "user", "content": user}]
 
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")

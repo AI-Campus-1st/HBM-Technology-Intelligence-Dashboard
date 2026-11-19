@@ -6,7 +6,7 @@
 -- 기준
 -- - 기간·partial: 01·02와 같다. 기사가 없는 달도 두 기업 모두 0으로 남긴다 (월 × 기업 격자).
 -- - 기사: 중복 제외(is_duplicate = 0), HBM 관련도 '핵심'·'관련' (LLM 분류 대상과 같다).
--- - 감성: news_analysis의 프롬프트 버전 sent_v1 (src/llm/prompts.py PROMPT_VERSION과 같아야 한다 — 테스트가 확인).
+-- - 감성: news_analysis의 프롬프트 버전 sent_v2 (src/llm/prompts.py PROMPT_VERSION과 같아야 한다 — 테스트가 확인).
 --   '해당없음'(그 기업이 기사에 나오지 않음)은 그 기업의 기사 수·비율에서 뺀다. articles = 그 기업이 등장한 HBM 기사 수.
 -- - net_sentiment = (긍정 − 부정) / 등장 기사 수 (−1 ~ 1). 등장 기사가 없으면 NULL.
 -- - net_ma3: 그 달 포함 최근 3개월의 긍정·부정·기사 수 합계로 계산한 순감성 (월 기사 수가 적어 흔들리는 것을 줄임).
@@ -19,7 +19,7 @@
 
 WITH RECURSIVE
 params(start_date, end_date, prompt_version) AS (
-    VALUES ('2023-10-19', '2026-10-19', 'sent_v1')
+    VALUES ('2023-10-19', '2026-10-19', 'sent_v2')
 ),
 months(month) AS (
     SELECT substr(start_date, 1, 7) FROM params

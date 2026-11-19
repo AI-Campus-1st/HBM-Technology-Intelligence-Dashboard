@@ -15,9 +15,9 @@ LLM 기업별 감성 분류 결과에서 층화 표본을 뽑아 사람이 독�
 
 실행: python -m src.llm.validate_sample sample [--n 100] [--force]
       python -m src.llm.validate_sample html      (판정용 원문 페이지: 표본 본문 전체·원문 링크, LLM 판정 없음)
-      python -m src.llm.validate_sample score
-저장: data/labels/sentiment_review_<버전>.csv (커밋 대상), outputs/reports/sentiment_eval_<버전>.csv,
-      outputs/reports/sentiment_eval_<버전>_by_label.csv, outputs/reports/sentiment_eval_<버전>_confusion.csv
+      python -m src.llm.validate_sample score [--version sent_v1]   (기본: 현재 프롬프트 버전)
+저장: data/labels/sentiment_review_sent_v1.csv (표본 고정, 커밋 대상), outputs/reports/sentiment_eval_<LLM 버전>.csv,
+      outputs/reports/sentiment_eval_<LLM 버전>_by_label.csv, outputs/reports/sentiment_eval_<LLM 버전>_confusion.csv
 
 담당: 김한승 (이슈 분석)
 일정: Day 4~5
@@ -37,11 +37,12 @@ from src.news.tag_validation import wilson_interval
 SAMPLE_SIZE = 100
 SEED = 42
 HEAD_CHARS = 500  # 검수 파일에 넣는 본문 앞부분 (LLM 입력 1,500자 중 판정 단서가 주로 있는 앞부분)
-REVIEW_PATH = config.LABELS_DIR / f"sentiment_review_{prompts.PROMPT_VERSION}.csv"
+# 표본은 sent_v1 결과에서 한 번 뽑아 고정한다. 프롬프트를 바꿔도(v2) 같은 표본·같은 사람 라벨로 채점해 비교한다.
+SAMPLE_VERSION = "sent_v1"
+REVIEW_PATH = config.LABELS_DIR / f"sentiment_review_{SAMPLE_VERSION}.csv"
 REPORTS_DIR = config.OUTPUTS_DIR / "reports"
-SCORE_PATH = REPORTS_DIR / f"sentiment_eval_{prompts.PROMPT_VERSION}.csv"
 # 기사 본문 전체가 들어가 크고 다시 만들 수 있으므로 git에 올리지 않는 data/processed에 둔다
-HTML_PATH = config.DATA_DIR / "processed" / f"sentiment_review_{prompts.PROMPT_VERSION}_원문.html"
+HTML_PATH = config.DATA_DIR / "processed" / f"sentiment_review_{SAMPLE_VERSION}_원문.html"
 COMPANIES = (("SK하이닉스", "skh"), ("삼성전자", "sec"))
 REVIEW_COLUMNS = ["news_id", "published_at", "quarter", "stratum", "title", "head",
                   "human_skh", "human_sec", "cross_skh", "cross_sec", "note", "labeler"]
@@ -175,7 +176,11 @@ def score_table(review: pd.DataFrame, llm: pd.DataFrame) -> pd.DataFrame:
 
 
 # ── 실행 ──
-def load_llm(db_path: Path = config.DB_PATH, prompt_version: str = prompts.PROMPT_VERSION) -> pd.DataFrame:
+def score_path(llm_version: str) -> Path:
+    return REPORTS_DIR / f"sentiment_eval_{llm_version}.csv"
+
+
+def load_llm(db_path: Path = config.DB_PATH, prompt_version: str = SAMPLE_VERSION) -> pd.DataFrame:
     """news_analysis(해당 버전) + 기사 제목·본문."""
     conn = db.connect(db_path)
     try:
@@ -195,7 +200,7 @@ def sample_main(n: int = SAMPLE_SIZE, force: bool = False, path: Path = REVIEW_P
         raise SystemExit(f"이미 있습니다: {path}\n라벨을 덮어쓰지 않으려고 멈춥니다. 새로 뽑으려면 --force를 붙이세요.")
     llm = load_llm(db_path)
     if llm.empty:
-        raise SystemExit(f"news_analysis({prompts.PROMPT_VERSION})가 비어 있습니다. 먼저 python -m src.llm.classify를 실행하세요.")
+        raise SystemExit(f"news_analysis({SAMPLE_VERSION})가 비어 있습니다. 먼저 python -m src.llm.classify를 실행하세요.")
     sample = build_sample(llm, n=n, seed=seed)
     path.parent.mkdir(parents=True, exist_ok=True)
     sample.to_csv(path, index=False, encoding="utf-8-sig")
@@ -204,10 +209,14 @@ def sample_main(n: int = SAMPLE_SIZE, force: bool = False, path: Path = REVIEW_P
     return sample
 
 
-def score_main(path: Path = REVIEW_PATH, db_path: Path = config.DB_PATH, out: Path = SCORE_PATH,
-               report_dir: Path = REPORTS_DIR) -> pd.DataFrame:
+def score_main(path: Path = REVIEW_PATH, db_path: Path = config.DB_PATH, llm_version: str = prompts.PROMPT_VERSION,
+               out: Path | None = None, report_dir: Path = REPORTS_DIR) -> pd.DataFrame:
+    """사람 라벨(표본 파일)과 llm_version의 LLM 판정을 비교한다. 결과 파일 이름에 llm_version이 들어간다."""
+    out = out or score_path(llm_version)
     review = pd.read_csv(path, encoding="utf-8-sig", dtype=str, keep_default_na=False).replace({"": None})
-    llm = load_llm(db_path)[["news_id", "sentiment_skh", "sentiment_sec"]]
+    llm = load_llm(db_path, llm_version)[["news_id", "sentiment_skh", "sentiment_sec"]]
+    if llm.empty:
+        raise SystemExit(f"news_analysis({llm_version})가 비어 있습니다.")
     table = score_table(review, llm)
     out.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(out, index=False, encoding="utf-8-sig")
@@ -223,7 +232,7 @@ def score_main(path: Path = REVIEW_PATH, db_path: Path = config.DB_PATH, out: Pa
     pd.concat(by_label).to_csv(report_dir / f"{stem}_by_label.csv", index=False, encoding="utf-8-sig")
     pd.concat(confusions).to_csv(report_dir / f"{stem}_confusion.csv", index=False, encoding="utf-8-sig")
 
-    print(f"라벨 {int(review['human_skh'].notna().sum())}/{len(review)}건 기준 ({prompts.PROMPT_VERSION})")
+    print(f"라벨 {int(review['human_skh'].notna().sum())}/{len(review)}건 기준 · 표본 {SAMPLE_VERSION} · LLM {llm_version}")
     print(table.round(3).to_string(index=False))
     print(f"저장: {out}, {stem}_by_label.csv, {stem}_confusion.csv")
     return table
@@ -250,7 +259,7 @@ def html_main(path: Path = REVIEW_PATH, db_path: Path = config.DB_PATH, out: Pat
             f'<div class="body">{body}</div></section>')
     toc = " ".join(f'<a href="#r{i}">{i}</a>' for i in range(1, len(review) + 1))
     doc = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
-<title>감성 검수 원문 {len(review)}건 ({prompts.PROMPT_VERSION})</title>
+<title>감성 검수 원문 {len(review)}건 ({SAMPLE_VERSION})</title>
 <style>body{{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;max-width:860px;margin:0 auto;padding:16px;line-height:1.7;color:#222}}
 nav{{position:sticky;top:0;background:#fff;padding:8px 0;border-bottom:1px solid #ddd;font-size:13px}}nav a{{margin-right:6px}}
 section{{border-bottom:1px solid #eee;padding:18px 0}}h2{{font-size:18px;margin:0 0 4px}}.no{{display:inline-block;min-width:34px;color:#888}}
@@ -271,7 +280,8 @@ def main(argv: list | None = None) -> None:
     p_sample = sub.add_parser("sample", help="검수용 층화 표본 CSV 만들기")
     p_sample.add_argument("--n", type=int, default=SAMPLE_SIZE, help=f"표본 수 (기본 {SAMPLE_SIZE})")
     p_sample.add_argument("--force", action="store_true", help="이미 있는 검수 파일을 덮어쓴다 (라벨이 지워짐)")
-    sub.add_parser("score", help="사람 라벨과 LLM 판정 비교")
+    p_score = sub.add_parser("score", help="사람 라벨과 LLM 판정 비교")
+    p_score.add_argument("--version", default=prompts.PROMPT_VERSION, help=f"채점할 LLM 프롬프트 버전 (기본 {prompts.PROMPT_VERSION})")
     sub.add_parser("html", help="판정용 원문 페이지 (본문 전체·원문 링크)")
     args = parser.parse_args(argv)
     if args.cmd == "sample":
@@ -279,7 +289,7 @@ def main(argv: list | None = None) -> None:
     elif args.cmd == "html":
         html_main()
     else:
-        score_main()
+        score_main(llm_version=args.version)
 
 
 if __name__ == "__main__":

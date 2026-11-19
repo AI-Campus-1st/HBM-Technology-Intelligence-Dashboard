@@ -113,7 +113,7 @@ def db_path(tmp_path):
     df = analysis_frame((6, 4, 0, 0))
     db.write_table(conn, "news", df.assign(url=df["news_id"], is_duplicate=0, dup_group_id=None)[
         ["news_id", "published_at", "title", "content", "url", "is_duplicate", "dup_group_id"]], mode="append")
-    db.write_table(conn, "news_analysis", df.assign(prompt_version=prompts.PROMPT_VERSION, issue_keywords="[]",
+    db.write_table(conn, "news_analysis", df.assign(prompt_version=vs.SAMPLE_VERSION, issue_keywords="[]",
                                                     model="m")[
         ["news_id", "prompt_version", "sentiment_skh", "sentiment_sec", "issue_keywords", "model"]], mode="append")
     conn.close()
@@ -136,7 +136,7 @@ def test_score_main_end_to_end(db_path, tmp_path):
     s["human_skh"] = s["news_id"].map(llm["sentiment_skh"])  # 전부 LLM과 같게 채우면 정확도 1
     s["human_sec"] = s["news_id"].map(llm["sentiment_sec"])
     s.to_csv(out, index=False, encoding="utf-8-sig")
-    table = vs.score_main(path=out, db_path=db_path, out=tmp_path / "score.csv",
+    table = vs.score_main(path=out, db_path=db_path, llm_version=vs.SAMPLE_VERSION, out=tmp_path / "score.csv",
                           report_dir=tmp_path).set_index("company")
     assert (table["accuracy"] == 1.0).all() and (table["n"] == 4).all()
     assert (tmp_path / "score.csv").exists()
@@ -152,3 +152,24 @@ def test_html_main_writes_full_text_without_llm_labels(db_path, tmp_path):
         assert f'id="r{i}"' in text and nid in text   # 번호 = CSV 행 순서
     assert "본문" * 400 in text                       # 본문 전체 (500자 head가 아님)
     assert "sentiment_skh" not in text and "긍정</td>" not in text  # LLM 판정 없음
+
+
+def test_score_main_compares_other_llm_version_on_same_sample(db_path, tmp_path):
+    """표본(sent_v1에서 뽑음)은 그대로 두고 다른 프롬프트 버전 결과를 채점한다 (v1·v2 비교)."""
+    out = tmp_path / "review.csv"
+    s = vs.sample_main(n=4, path=out, db_path=db_path)
+    conn = db.connect(db_path)
+    llm = vs.load_llm(db_path)
+    db.write_table(conn, "news_analysis", llm.assign(prompt_version="v_other", sentiment_skh="해당없음",
+                   issue_keywords="[]", model="m")[["news_id", "prompt_version", "sentiment_skh",
+                   "sentiment_sec", "issue_keywords", "model"]], mode="append")
+    conn.close()
+    l1 = llm.set_index("news_id")
+    s["human_skh"] = s["news_id"].map(l1["sentiment_skh"])
+    s["human_sec"] = s["news_id"].map(l1["sentiment_sec"])
+    s.to_csv(out, index=False, encoding="utf-8-sig")
+    t = vs.score_main(path=out, db_path=db_path, llm_version="v_other", out=tmp_path / "o.csv",
+                      report_dir=tmp_path).set_index("company")
+    assert t.loc["삼성전자", "accuracy"] == 1.0          # sec는 그대로
+    assert t.loc["SK하이닉스", "accuracy"] < 1.0          # skh는 모두 해당없음으로 바꿈
+    assert vs.REVIEW_PATH.name == "sentiment_review_sent_v1.csv"  # 표본 파일은 v1 고정

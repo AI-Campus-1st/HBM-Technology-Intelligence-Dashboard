@@ -183,3 +183,29 @@ def test_run_success_resets_consecutive_failures(conn):
     saved, failures = classify.run(conn, client, classify.load_targets(conn), model="m",
                                    max_retries=0, abort_after=2)
     assert saved == 1 and len(failures) == 1
+
+
+# ── 프롬프트 버전 (v1 보존 + v2) ──
+def test_prompt_versions_registered():
+    assert prompts.PROMPT_VERSION == "sent_v2"
+    assert set(prompts.PROMPTS) >= {"sent_v1", "sent_v2"}
+    assert prompts.PROMPTS["sent_v1"]["max_chars"] == 1500
+    assert prompts.PROMPTS["sent_v2"]["max_chars"] == 6000
+    v1, v2 = prompts.PROMPTS["sent_v1"]["system"], prompts.PROMPTS["sent_v2"]["system"]
+    assert "7. 수출 규제" not in v1 and "7. 수출 규제" in v2  # v2: 업계 공통 악재·호재 규칙
+    assert v2.startswith(v1.split("[출력 형식]")[0].rstrip())   # 규칙 1~6은 v1과 같다
+    assert prompts.SYSTEM_PROMPT == v2
+
+
+def test_build_messages_uses_version_length():
+    long = "가" * 7000
+    v1 = prompts.build_messages("t", long, version="sent_v1")[1]["content"]
+    v2 = prompts.build_messages("t", long)[1]["content"]
+    assert "가" * 1500 in v1 and "가" * 1501 not in v1
+    assert "가" * 6000 in v2 and "가" * 6001 not in v2
+    assert prompts.build_messages("t", long, version="sent_v1")[0]["content"] == prompts.PROMPTS["sent_v1"]["system"]
+
+
+def test_build_messages_unknown_version():
+    with pytest.raises(KeyError):
+        prompts.build_messages("t", "b", version="nope")
