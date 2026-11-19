@@ -158,3 +158,28 @@ def test_main_dry_run_makes_no_client(conn, tmp_path, monkeypatch):
     monkeypatch.setattr(classify, "make_client", boom)
     est = classify.main(db_path=tmp_path / "t.db", dry_run=True)
     assert est["n_articles"] == 2
+
+
+def test_run_stops_after_consecutive_failures(tmp_path):
+    """환경 문제처럼 매번 같은 오류가 나면 남은 기사를 부르지 않고 멈춘다 (불필요한 호출·비용 방지)."""
+    conn = db.connect(db.init_db(tmp_path / "s.db"))
+    ids = [f"n{i}" for i in range(6)]
+    db.write_table(conn, "news", pd.DataFrame([
+        {"news_id": i, "published_at": "2024-01-01", "title": i, "content": "본문", "url": i,
+         "is_duplicate": 0, "dup_group_id": None} for i in ids]), mode="append")
+    db.write_table(conn, "news_tag", pd.DataFrame([
+        {"news_id": i, "tag_type": "tech", "tag": "HBM", "relevance": "핵심", "in_title": 1,
+         "body_count": 1, "rule_version": "test"} for i in ids]), mode="append")
+    client = FakeClient([TypeError("env")] * 100)
+    saved, failures = classify.run(conn, client, classify.load_targets(conn), model="m",
+                                   max_retries=0, abort_after=2)
+    assert saved == 0 and len(failures) == 2  # 2건 연속 실패 후 중단
+    assert len(client.calls) == 2
+    conn.close()
+
+
+def test_run_success_resets_consecutive_failures(conn):
+    client = FakeClient(["bad", ok()])  # a 실패, c 성공 → 중단하지 않음
+    saved, failures = classify.run(conn, client, classify.load_targets(conn), model="m",
+                                   max_retries=0, abort_after=2)
+    assert saved == 1 and len(failures) == 1

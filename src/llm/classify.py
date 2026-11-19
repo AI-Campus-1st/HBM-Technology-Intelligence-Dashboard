@@ -7,6 +7,7 @@ HBM 기사에 LLM 기업별 감성 분류·이슈 키워드 추출을 배치로 
 - 응답 형식이 틀리거나 호출이 실패하면 max_retries번 다시 시도하고, 그래도 안 되면 실패 목록에 남긴다 (DB에는 넣지 않음).
 - 같은 prompt_version으로 이미 저장된 기사는 건너뛴다 → 중간에 멈춰도 다시 실행하면 남은 기사만 처리한다.
 - batch_size건마다 DB에 저장해 중간 결과를 잃지 않는다.
+- 기사 abort_after건이 연속으로 실패하면 남은 기사는 부르지 않고 멈춘다 (환경 문제로 호출·비용만 쓰는 것을 막음).
 
 실행: python -m src.llm.classify --dry-run      (API 호출 없이 대상 건수·입력 글자 수만)
       python -m src.llm.classify --limit 20     (앞 20건만 — 프롬프트 점검용)
@@ -31,6 +32,7 @@ from src.llm import prompts
 TARGET_LEVELS = ("핵심", "관련")
 BATCH_SIZE = 20
 MAX_RETRIES = 2
+ABORT_AFTER = 5  # 연속 실패가 이만큼이면 멈춘다 (패키지·키·모델 문제처럼 기사와 무관한 오류일 가능성이 큼)
 RETRY_WAIT_SEC = 2.0
 REPORTS_DIR = config.OUTPUTS_DIR / "reports"
 
@@ -93,9 +95,13 @@ def classify_article(client, title: str, content: str | None, model: str,
 
 def run(conn, client, targets: pd.DataFrame, model: str = config.LLM_MODEL,
         prompt_version: str = prompts.PROMPT_VERSION, batch_size: int = BATCH_SIZE,
-        max_retries: int = MAX_RETRIES, wait: float = 0.0) -> tuple[int, pd.DataFrame]:
-    """대상 기사를 분류해 batch_size건마다 news_analysis에 upsert. Returns (저장 건수, 실패 목록)."""
-    saved, buffer, failures = 0, [], []
+        max_retries: int = MAX_RETRIES, wait: float = 0.0,
+        abort_after: int = ABORT_AFTER) -> tuple[int, pd.DataFrame]:
+    """대상 기사를 분류해 batch_size건마다 news_analysis에 upsert. Returns (저장 건수, 실패 목록).
+
+    abort_after건 연속 실패하면 멈춘다 (성공하면 연속 횟수는 0으로 돌아간다).
+    """
+    saved, buffer, failures, streak = 0, [], [], 0
 
     def flush():
         nonlocal saved
@@ -108,7 +114,13 @@ def run(conn, client, targets: pd.DataFrame, model: str = config.LLM_MODEL,
         if result is None:
             failures.append({"news_id": row.news_id, "published_at": row.published_at, "title": row.title,
                              "attempts": attempts, "error": error})
+            streak += 1
+            if streak >= abort_after:
+                print(f"  {streak}건 연속 실패로 중단 (마지막 오류: {error}). 남은 {len(targets) - i}건은 호출하지 않음")
+                break
+            continue
         else:
+            streak = 0
             buffer.append({"news_id": row.news_id, "prompt_version": prompt_version,
                            "sentiment_skh": result["sentiment_skh"], "sentiment_sec": result["sentiment_sec"],
                            "issue_keywords": json.dumps(result["issue_keywords"], ensure_ascii=False),
