@@ -1,7 +1,7 @@
 # [공동] 공통 패키지 — 추가 시 PR로 합의
-pandas
-numpy
-python-dotenv
-plotly
-streamlit
-pytest
+pandas==3.1.1
+numpy==2.5.4
+python-dotenv==1.2.4
+plotly==7.1.0
+streamlit==1.67.0
+pytest==9.2.0
