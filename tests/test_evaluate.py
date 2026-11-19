@@ -84,3 +84,31 @@ def test_eval_set_is_well_formed():
     ans = df[df["expected"] == "답변"]
     assert (ans["gold_groups"] != "").all() and (ans["answer_pattern"] != "").all()
     assert (df.loc[df["expected"] == "거절", "gold_groups"] == "").all()
+
+
+def test_retrieval_one_reports_pool_rank():
+    d = docs()
+    store = FixedStore([(d["s2_00_000"], 0.4)] * 7 + [(d["s1_a1p05_000"], 0.5)])
+    r = ev.retrieval_one(row(question="SK하이닉스 무엇?"), store)  # 키워드가 안 맞아 벡터 순서 그대로
+    assert (r["hit_hybrid"], r["rank_hybrid"], r["rank_pool"]) == (0, None, 8)
+    s = ev.summarize_retrieval(pd.DataFrame([{"qid": "Q1", "expected": "답변", **r}]))
+    assert s["hit@K"] == "0/1" and s["K 밖 정답 순위"] == "Q1:8"
+
+
+def test_paths_by_version():
+    e, r, s = ev.paths("qa_eval_v2")
+    assert e.name == "qa_eval_v2.csv" and r.name == "qa_eval_v2.csv" and s.name == "qa_eval_v2_summary.csv"
+
+
+def test_evaluate_one_reranks_once_per_company():
+    from tests.test_qa_chain import FakeReranker
+
+    d = docs()
+    store = FixedStore([(d["s1_a1p05_000"], 0.41), (d["s2_00_000"], 0.5), (d["m1_a1p08_000"], 0.45)])
+    llm = FakeLLM(qa_chain.Answer(answerable=True, answer="70% [1]", used_sources=[1]))
+    rr = FakeReranker("70")
+    r = ev.evaluate_one(row(), store, llm, reranker=rr)
+    assert len(rr.calls) == 1 and r["correct"] == 1  # 검색 지표와 답변이 재정렬 결과 하나를 같이 쓴다
+    rr2 = FakeReranker("70")
+    ev.evaluate_one(row(question="SK하이닉스와 삼성전자 HBM 비교"), store, llm, reranker=rr2)
+    assert len(rr2.calls) == 2  # 기업별 한 번씩

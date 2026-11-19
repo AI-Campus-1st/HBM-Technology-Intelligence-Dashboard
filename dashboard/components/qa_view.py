@@ -77,6 +77,11 @@ hr { border-color: #2a2a2a !important; }
 .stApp [data-testid="stButtonGroup"] button[aria-checked="true"] *,
 .stApp [data-testid="stButtonGroup"] button[aria-pressed="true"] * { color: #000000; }
 
+/* 토글: 켜짐은 초록 (활성 상태) */
+.stApp [data-testid="stCheckbox"] label span, .stApp [data-baseweb="checkbox"] div { color: var(--text-3); }
+.stApp [data-baseweb="checkbox"] input:checked + div,
+.stApp [data-testid="stCheckbox"] label[data-selected="true"] > span + div { background: var(--green) !important; }
+
 /* 펼치기 */
 .stApp [data-testid="stExpander"] details { background: var(--surface); border: none; border-radius: 8px; }
 .stApp [data-testid="stExpander"] summary p { color: var(--text); font-weight: 600; }

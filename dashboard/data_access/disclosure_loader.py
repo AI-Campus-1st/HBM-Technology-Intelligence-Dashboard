@@ -77,7 +77,8 @@ def read_saved_answers(path: Path | None = None) -> dict | None:
         return None
     answers = {r.question: (r, {s["chunk_id"]: data["texts"].get(s["chunk_id"], "") for s in r.sources})
                for r in data["results"]}
-    return {"created_at": data["created_at"], "model": data["model"], "answers": answers}
+    return {"created_at": data["created_at"], "model": data["model"], "reranker": data.get("reranker"),
+            "answers": answers}
 
 
 def chunk_texts(store, ids: list[str]) -> dict[str, str]:
@@ -117,3 +118,15 @@ def get_store():
 @st.cache_resource(show_spinner=False)
 def get_llm():
     return qa_chain.make_llm()
+
+
+def reranker_available() -> bool:
+    """재정렬 패키지(requirements/rerank.txt)가 설치돼 있는가. 모델을 불러오지는 않는다."""
+    import importlib.util
+
+    return importlib.util.find_spec("sentence_transformers") is not None
+
+
+@st.cache_resource(show_spinner=False)
+def get_reranker():
+    return qa_chain.load_reranker()

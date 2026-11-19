@@ -4,6 +4,7 @@
 - 예시 질문: 미리 저장한 답변(outputs/reports/qa_samples.json)을 바로 보여 준다. API를 부르지 않는다.
 - 직접 입력한 질문: src.rag.qa_chain.ask (하이브리드 검색 + LLM config.LLM_MODEL)로 실시간 답변. 근거가 없으면 거절한다.
   (대시보드는 저장된 결과만 읽는 것이 원칙이지만, 자유 질문은 미리 만들어 둘 수 없어 이 경우만 예외로 둔다. 리포트 5.5)
+- 정밀 검색(선택): 재정렬 모델(requirements/rerank.txt)이 설치돼 있으면 켤 수 있다. CPU에서 질문당 약 1분이라 기본은 끔 (리포트 5.4)
 - 답변 아래에 근거 공시(공시명·제출일·위치·DART 링크·발췌)를 보인다.
 - 벡터 DB·API 키가 없으면 직접 질문은 막고 준비 방법을 안내한다. 예시 답변과 공시 목록은 그대로 보인다.
 실행: streamlit run dashboard/app.py → 왼쪽 메뉴 '공시 QA'
@@ -38,7 +39,8 @@ qa_view.render_html(qa_view.stats_html(manifest, summary))
 
 saved = loader.load_saved_answers()
 saved_answers = saved["answers"] if saved else {}
-saved_note = f"저장된 답변 · {saved['created_at'][:10]} 생성" if saved else None
+saved_note = (f"저장된 답변 · {saved['created_at'][:10]} 생성" + (" · 정밀 검색" if saved.get("reranker") else "")
+              if saved else None)
 problems = loader.readiness(manifest)
 for p in problems:
     st.warning(p + (" 예시 질문은 저장된 답변으로 볼 수 있습니다." if saved_answers else ""))
@@ -70,15 +72,20 @@ with st.form("qa_form", border=False):
                                 label_visibility="collapsed")
     submitted = col_b.form_submit_button("질문하기", type="primary", use_container_width=True, disabled=bool(problems) and not saved_answers)
 
+use_rerank = loader.reranker_available() and st.toggle(
+    "정밀 검색 (재정렬 모델, 직접 입력한 질문에만 적용, 질문당 약 1분)", value=False, key="qa_rerank",
+    help="후보 40개를 질문과 함께 다시 채점합니다. 평가 질문에서 검색 적중이 16/19 → 19/19로 올랐지만 CPU에서 느립니다.")
+
 if submitted and question.strip() in saved_answers:
     push(*saved_answers[question.strip()], saved_note)
 elif submitted and question.strip() and problems:
     st.info("지금은 실시간 질문을 쓸 수 없습니다. 위의 예시 질문을 눌러 저장된 답변을 확인해 주세요.")
 elif submitted and question.strip():
     try:
-        with st.spinner("공시에서 근거를 찾는 중…"):
+        with st.spinner("공시에서 근거를 찾는 중…" + (" (정밀 검색: 약 1분)" if use_rerank else "")):
             store = loader.get_store()
-            result = qa_chain.ask(question.strip(), store, loader.get_llm())
+            reranker = loader.get_reranker() if use_rerank else None
+            result = qa_chain.ask(question.strip(), store, loader.get_llm(), reranker=reranker)
             texts = loader.chunk_texts(store, [s["chunk_id"] for s in result.sources])
         push(result, texts)
     except Exception as e:  # API 오류 등: 키·내용은 보이지 않고 종류만 알린다

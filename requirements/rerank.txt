@@ -1,0 +1,4 @@
+# [한도윤] 선택: 공시 Q&A 교차 인코더 재정렬 (BAAI/bge-reranker-v2-m3, 리포트 5.4)
+# requirements.txt에 넣지 않는다: torch와 모델(약 2.3GB)이 커서 재정렬을 쓸 사람만 설치한다.
+# 설치: pip install -r requirements/rerank.txt (CPU용 torch가 함께 설치된다)
+sentence-transformers==6.3.0
