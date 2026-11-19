@@ -209,3 +209,45 @@ def test_build_messages_uses_version_length():
 def test_build_messages_unknown_version():
     with pytest.raises(KeyError):
         prompts.build_messages("t", "b", version="nope")
+
+
+# ── 결과 공유: 내보내기·불러오기 (DB는 git 제외라 CSV로 공유) ──
+def test_export_import_roundtrip(conn, tmp_path):
+    classify.run(conn, FakeClient([ok(), ok(skh="중립", sec="부정", kw=["수율, 지연"])]),
+                 classify.load_targets(conn), model="m")
+    paths = classify.export_results(conn, out_dir=tmp_path)
+    assert [p.name for p in paths] == [f"news_analysis_{prompts.PROMPT_VERSION}.csv"]
+    exported = pd.read_csv(paths[0], dtype=str)
+    assert exported["news_id"].tolist() == ["a", "c"] and "title" in exported.columns  # 사람이 볼 수 있게 제목 포함
+
+    other = db.connect(db.init_db(tmp_path / "other.db"))   # 다른 사람 PC: 뉴스는 있고 분류 결과는 없음
+    db.write_table(other, "news", db.read_table(conn, "news"), mode="append")
+    assert classify.import_results(other, paths) == 2
+    assert classify.import_results(other, paths) == 2          # 다시 불러와도 중복되지 않음 (upsert)
+    got = db.read_table(other, "news_analysis").sort_values("news_id")
+    want = db.read_table(conn, "news_analysis").sort_values("news_id")
+    assert got.reset_index(drop=True).equals(want.reset_index(drop=True))
+    assert json.loads(got.iloc[1]["issue_keywords"]) == ["수율, 지연"]   # 쉼표가 든 키워드도 그대로
+    other.close()
+
+
+def test_import_rejects_bad_rows(conn, tmp_path):
+    bad = tmp_path / "news_analysis_x.csv"
+    pd.DataFrame([{"news_id": "zzz", "prompt_version": "x", "sentiment_skh": "긍정", "sentiment_sec": "중립",
+                   "issue_keywords": "[]", "model": "m"}]).to_csv(bad, index=False, encoding="utf-8-sig")
+    with pytest.raises(ValueError, match="news"):
+        classify.import_results(conn, [bad])                   # DB에 없는 기사
+    pd.DataFrame([{"news_id": "a", "prompt_version": "x", "sentiment_skh": "좋음", "sentiment_sec": "중립",
+                   "issue_keywords": "[]", "model": "m"}]).to_csv(bad, index=False, encoding="utf-8-sig")
+    with pytest.raises(ValueError, match="라벨"):
+        classify.import_results(conn, [bad])
+    assert db.read_table(conn, "news_analysis").empty         # 실패하면 아무것도 넣지 않음
+
+
+def test_main_import_makes_no_client(conn, tmp_path, monkeypatch):
+    classify.run(conn, FakeClient([ok(), ok()]), classify.load_targets(conn), model="m")
+    classify.export_results(conn, out_dir=tmp_path)
+    conn.execute("DELETE FROM news_analysis"); conn.commit()
+    monkeypatch.setattr(classify, "make_client", lambda: (_ for _ in ()).throw(AssertionError("API 호출 금지")))
+    n = classify.main(db_path=tmp_path / "t.db", import_dir=tmp_path, do_import=True)
+    assert n == 2

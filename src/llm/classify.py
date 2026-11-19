@@ -12,6 +12,10 @@ HBM 기사에 LLM 기업별 감성 분류·이슈 키워드 추출을 배치로 
 실행: python -m src.llm.classify --dry-run      (API 호출 없이 대상 건수·입력 글자 수만)
       python -m src.llm.classify --limit 20     (앞 20건만 — 프롬프트 점검용)
       python -m src.llm.classify                (남은 대상 전체)
+      python -m src.llm.classify --export       (DB 결과 → outputs/reports/news_analysis_<버전>.csv, 커밋해서 공유)
+      python -m src.llm.classify --import       (공유받은 CSV → DB, API 호출 없음)
+결과 공유: DB(data/db)는 git에 올리지 않으므로, 분류한 사람이 --export한 CSV를 커밋하고 다른 사람은 --import로 넣는다.
+      다시 분류하면 비용이 들고 LLM 특성상 결과가 조금 달라질 수 있어, 팀이 같은 판정을 쓰도록 하기 위함이다.
 필요: .env의 OPENAI_API_KEY, openai 패키지 (requirements/issue.txt). 모델은 config.LLM_MODEL (프로젝트 공통).
 저장: news_analysis (news_id, prompt_version) / 실패 목록 outputs/reports/llm_failures_<버전>.csv
 
@@ -35,6 +39,8 @@ MAX_RETRIES = 2
 ABORT_AFTER = 5  # 연속 실패가 이만큼이면 멈춘다 (패키지·키·모델 문제처럼 기사와 무관한 오류일 가능성이 큼)
 RETRY_WAIT_SEC = 2.0
 REPORTS_DIR = config.OUTPUTS_DIR / "reports"
+EXPORT_GLOB = "news_analysis_*.csv"
+EXPORT_COLUMNS = ["news_id", "prompt_version", "sentiment_skh", "sentiment_sec", "issue_keywords", "model"]
 
 
 def load_targets(conn, prompt_version: str = prompts.PROMPT_VERSION, limit: int | None = None) -> pd.DataFrame:
@@ -140,10 +146,65 @@ def summarize(conn, prompt_version: str = prompts.PROMPT_VERSION) -> pd.DataFram
     return pd.DataFrame(rows)
 
 
+def export_results(conn, out_dir: Path = REPORTS_DIR) -> list[Path]:
+    """DB의 분류 결과를 프롬프트 버전별 CSV로 저장한다. 사람이 볼 수 있게 발행일·제목을 뒤에 붙인다 (불러올 때는 무시)."""
+    df = pd.read_sql_query("""
+        SELECT a.news_id, a.prompt_version, a.sentiment_skh, a.sentiment_sec, a.issue_keywords, a.model,
+               n.published_at, n.title
+        FROM news_analysis AS a JOIN news AS n ON n.news_id = a.news_id
+        ORDER BY a.prompt_version, n.published_at, a.news_id
+    """, conn)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for version, g in df.groupby("prompt_version", sort=True):
+        path = out_dir / f"news_analysis_{version}.csv"
+        g.to_csv(path, index=False, encoding="utf-8-sig")
+        paths.append(path)
+    return paths
+
+
+def import_results(conn, paths: list[Path]) -> int:
+    """공유받은 CSV를 검증해 news_analysis에 upsert한다 (API 호출 없음). 한 행이라도 틀리면 아무것도 넣지 않는다.
+
+    검증: 필수 열, 라벨 값(prompts.LABELS), 키워드 JSON 배열, 기사(news_id)가 이 DB에 있는지.
+    """
+    frames = [pd.read_csv(p, encoding="utf-8-sig", dtype=str, keep_default_na=False) for p in paths]
+    if not frames:
+        return 0
+    df = pd.concat(frames, ignore_index=True)
+    missing = set(EXPORT_COLUMNS) - set(df.columns)
+    if missing:
+        raise ValueError(f"필수 열 없음: {sorted(missing)}")
+    df = df[EXPORT_COLUMNS]
+    for col in ("sentiment_skh", "sentiment_sec"):
+        bad = sorted(set(df[col]) - set(prompts.LABELS))
+        if bad:
+            raise ValueError(f"{col}에 허용되지 않은 라벨: {bad}")
+    for v in df["issue_keywords"]:
+        if not isinstance(json.loads(v or "[]"), list):
+            raise ValueError(f"issue_keywords가 JSON 배열이 아님: {v[:50]}")
+    known = set(pd.read_sql_query("SELECT news_id FROM news", conn)["news_id"])
+    unknown = sorted(set(df["news_id"]) - known)
+    if unknown:
+        raise ValueError(f"이 DB의 news에 없는 기사 {len(unknown)}건 (예: {unknown[:3]}). load_news를 먼저 실행하세요.")
+    return db.write_table(conn, "news_analysis", df, mode="upsert")
+
+
 def main(limit: int | None = None, dry_run: bool = False, model: str = config.LLM_MODEL,
-         db_path: Path = config.DB_PATH, reports_dir: Path = REPORTS_DIR) -> dict:
+         db_path: Path = config.DB_PATH, reports_dir: Path = REPORTS_DIR,
+         do_export: bool = False, do_import: bool = False, import_dir: Path = REPORTS_DIR):
     conn = db.connect(db_path)
     try:
+        if do_export:
+            paths = export_results(conn, reports_dir)
+            for p in paths:
+                print(f"내보내기: {p} ({len(pd.read_csv(p, encoding='utf-8-sig')):,}행)")
+            return paths
+        if do_import:
+            paths = sorted(import_dir.glob(EXPORT_GLOB))
+            n = import_results(conn, paths)
+            print(f"불러오기: {', '.join(p.name for p in paths) or '파일 없음'} → news_analysis {n:,}행 (API 호출 없음)")
+            return n
         targets = load_targets(conn, limit=limit)
         est = estimate(targets)
         print(f"프롬프트 {prompts.PROMPT_VERSION} · 모델 {model} · 남은 대상 {est['n_articles']}건 "
@@ -171,5 +232,8 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=None, help="앞에서부터 N건만 (프롬프트 점검용)")
     parser.add_argument("--dry-run", action="store_true", help="API 호출 없이 대상 건수·입력 글자 수만")
     parser.add_argument("--model", default=config.LLM_MODEL, help=f"기본 {config.LLM_MODEL} (config.LLM_MODEL)")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--export", action="store_true", help="DB 결과를 outputs/reports/news_analysis_<버전>.csv로 저장")
+    group.add_argument("--import", dest="do_import", action="store_true", help="공유받은 CSV를 DB에 넣기 (API 호출 없음)")
     args = parser.parse_args()
-    main(limit=args.limit, dry_run=args.dry_run, model=args.model)
+    main(limit=args.limit, dry_run=args.dry_run, model=args.model, do_export=args.export, do_import=args.do_import)
