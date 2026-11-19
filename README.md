@@ -94,6 +94,7 @@ copy .env.example .env
 | 8-1a | `python -m src.dart.issue_summary` | 한도윤 | 사건 요약 라벨 `data/labels/issue_summary_v1.csv` 점검(구간·상태·근거 접수번호가 `verified=1`인지). `--apply`는 `status=확정` 행만 `issues.summary`에 쓴다 (8·8-1 다음. 8을 다시 돌리면 summary가 비므로 다시 실행) |
 | 8-2 | `python -m src.eda.news_sql_report` | 김한승 | 뉴스 SQL 집계 `sql/01~03_*.sql` 실행 (8 다음 — 03이 `issues`를 읽음. `outputs/reports/sql01~03_*.csv`) |
 | 9 | `python -m src.llm.classify` | 김한승 | HBM 기사 385건 기업별 감성(SK하이닉스·삼성전자)·이슈 키워드 → `news_analysis` (프롬프트 `sent_v1`, 7 다음. `--dry-run`은 대상·입력 글자 수만, `--limit N`은 앞 N건만. 다시 실행하면 남은 기사만 처리) |
+| 9-1 | `python -m src.llm.validate_sample sample` → `score` | 김한승 | 감성 분류 층화 표본 100건 검수 파일 `data/labels/sentiment_review_sent_v1.csv`(LLM 판정 숨김) → 사람·교차 라벨을 채운 뒤 `score`로 기업별 정확도·Macro-F1·κ·혼동행렬 (`outputs/reports/sentiment_eval_sent_v1*.csv`) |
 | 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB `data/vectordb/` (6-2 다음. OpenAI 임베딩 호출, `--dry-run`은 토큰 수만, `--query "질문"`은 검색만. 김한승은 실행하지 않고 공유 드라이브의 vectordb zip을 풀어 쓴다) |
 | 10-1 | `python -m src.rag.qa_chain "질문"` | 한도윤 | 공시 근거 질의응답 (10 다음. `--samples`는 예시 질문 9개 → `outputs/reports/qa_samples.csv`, 대시보드용 저장 답변 `qa_samples.json`. LLM은 `config.LLM_MODEL`) |
 | 10-2 | `python -m src.rag.evaluate` | 한도윤 | 공시 Q&A 평가 (10-1 다음. 평가 질문 `data/labels/qa_eval_v1.csv` 24문항 → `outputs/reports/qa_eval_v1.csv`·`qa_eval_v1_summary.csv`. 질문마다 LLM 1회) |
