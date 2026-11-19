@@ -61,3 +61,15 @@ def test_label_file_passes_check_against_its_own_evidence():
     verified = review.loc[review["verified"].astype(str) == "1", ["issue_id", "rcept_no"]]
     problems, _ = isum.check(df, list(df["issue_id"]), verified)
     assert problems == []
+
+
+def test_excluded_status_needs_reason_and_is_not_applied(tmp_path):
+    problems, _ = isum.check(summaries(status="제외", note=""), ["I1", "I2"], VERIFIED)
+    assert "I1: 제외인데 note(제외 이유)가 비어 있음" in problems
+    problems, _ = isum.check(summaries(status="제외", note="공시로 확인 안 됨"), ["I1", "I2"], VERIFIED)
+    assert problems == []
+    conn = sqlite3.connect(tmp_path / "t.db")
+    conn.execute("CREATE TABLE issues (issue_id TEXT, summary TEXT)")
+    conn.executemany("INSERT INTO issues VALUES (?, ?)", [("I1", "옛 요약"), ("I2", None)])
+    isum.apply(conn, summaries(status="제외", note="이유"))
+    assert dict(conn.execute("SELECT issue_id, summary FROM issues"))["I1"] is None
