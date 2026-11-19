@@ -178,7 +178,7 @@ mid_project/
 | `.gitattributes` | 줄바꿈을 LF로 통일해 Windows/Mac 간 "내용은 같은데 전부 바뀐" 충돌을 막는다. |
 | `.github/pull_request_template.md` | PR 작성 시 담당 범위·키 노출·스키마 동기화를 체크하게 한다. |
 | `.github/CODEOWNERS` | 담당 폴더가 바뀌면 담당자를 자동 리뷰어로 지정 (김한승 `han0210`, 한도윤 `DoyoonHan`). |
-| `.streamlit/config.toml` | 대시보드 테마·서버 설정. |
+| `.streamlit/config.toml` | 대시보드 테마(어두운 테마, `components/theme.py`와 같은 색)·서버 설정. |
 
 ### `docs/` — 문서
 
@@ -267,8 +267,9 @@ mid_project/
 | `pages/2_공시_QA.py` | 한도윤 | 공시 Q&A 화면: 예시 질문은 저장된 답변(API 호출 없음), 직접 질문은 실시간 → 답변·근거 공시 카드(DART 링크·발췌), 거절 표시, 검색 대상 공시 101건 목록(기업·유형 필터). |
 | `components/filters.py` | 공동 | 기간·기업(SK하이닉스/삼성전자)·카테고리·기술 태그 공통 필터. 모든 차트가 이 값을 받는다. |
 | `components/conclusion.py` | 공동 | 상단 의사결정 결론 문구. |
+| `components/theme.py` | 공동 | 대시보드 전체 공통 어두운 테마(Spotify 디자인 문서 참조). 모든 페이지 맨 위에서 `theme.apply_theme()`를 부른다. |
 | `components/issue_charts.py` | 김한승 | Plotly 이슈·감성 차트 함수. |
-| `components/qa_view.py` | 한도윤 | 답변·근거 카드·공시 목록 HTML과 페이지 전용 어두운 테마(Spotify 디자인 문서 참조). |
+| `components/qa_view.py` | 한도윤 | 답변·근거 카드·공시 목록 HTML과 탭 2 전용 CSS(`.qa-*`). |
 | `data_access/issue_loader.py` | 김한승 | 뉴스·분석 결과 조회 (`st.cache_data`). |
 | `data_access/disclosure_loader.py` | 한도윤 | RAG 대상 공시 목록·벡터 DB 매니페스트·평가 요약 읽기, 벡터 DB·LLM 1회 로드(`st.cache_resource`). |
 
