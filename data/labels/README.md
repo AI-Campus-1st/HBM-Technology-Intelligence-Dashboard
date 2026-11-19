@@ -85,7 +85,7 @@
 
 | 열 | 내용 |
 |---|---|
-| `news_id` ~ `head` | 판정 자료 (발행일·분기·층·제목·본문 앞 500자). 애매하면 DB `news.content` 전문을 본다 |
+| `news_id` ~ `head` | 판정 자료 (발행일·분기·층·제목·본문 앞 500자). **본문 전체·원문 링크는 `python -m src.llm.validate_sample html`로 만든 `data/processed/sentiment_review_sent_v1_원문.html`(번호 = CSV 행 순서)을 브라우저로 연다** |
 | `human_skh`, `human_sec` | 김한승 판정: `긍정` / `중립` / `부정` / `해당없음` (SK하이닉스·삼성전자 각각) |
 | `cross_skh`, `cross_sec` | 교차 검수자(한도윤) 판정. **앞에서부터 25건만** 채우고, `human_*`은 보지 않는다 |
 | `note`, `labeler` | 애매한 이유, 판정한 사람 |

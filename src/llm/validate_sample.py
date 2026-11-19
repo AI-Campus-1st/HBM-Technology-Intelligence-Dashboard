@@ -14,6 +14,7 @@ LLM 기업별 감성 분류 결과에서 층화 표본을 뽑아 사람이 독�
     다수 라벨만 맞혀도 정확도가 높게 나온다. 라벨마다 F1을 구해 단순 평균한 Macro-F1과 라벨별 재현율을 함께 본다.
 
 실행: python -m src.llm.validate_sample sample [--n 100] [--force]
+      python -m src.llm.validate_sample html      (판정용 원문 페이지: 표본 본문 전체·원문 링크, LLM 판정 없음)
       python -m src.llm.validate_sample score
 저장: data/labels/sentiment_review_<버전>.csv (커밋 대상), outputs/reports/sentiment_eval_<버전>.csv,
       outputs/reports/sentiment_eval_<버전>_by_label.csv, outputs/reports/sentiment_eval_<버전>_confusion.csv
@@ -23,6 +24,7 @@ LLM 기업별 감성 분류 결과에서 층화 표본을 뽑아 사람이 독�
 """
 
 import argparse
+import html
 from pathlib import Path
 
 import numpy as np
@@ -38,6 +40,8 @@ HEAD_CHARS = 500  # 검수 파일에 넣는 본문 앞부분 (LLM 입력 1,500�
 REVIEW_PATH = config.LABELS_DIR / f"sentiment_review_{prompts.PROMPT_VERSION}.csv"
 REPORTS_DIR = config.OUTPUTS_DIR / "reports"
 SCORE_PATH = REPORTS_DIR / f"sentiment_eval_{prompts.PROMPT_VERSION}.csv"
+# 기사 본문 전체가 들어가 크고 다시 만들 수 있으므로 git에 올리지 않는 data/processed에 둔다
+HTML_PATH = config.DATA_DIR / "processed" / f"sentiment_review_{prompts.PROMPT_VERSION}_원문.html"
 COMPANIES = (("SK하이닉스", "skh"), ("삼성전자", "sec"))
 REVIEW_COLUMNS = ["news_id", "published_at", "quarter", "stratum", "title", "head",
                   "human_skh", "human_sec", "cross_skh", "cross_sec", "note", "labeler"]
@@ -225,6 +229,42 @@ def score_main(path: Path = REVIEW_PATH, db_path: Path = config.DB_PATH, out: Pa
     return table
 
 
+def html_main(path: Path = REVIEW_PATH, db_path: Path = config.DB_PATH, out: Path = HTML_PATH) -> Path:
+    """판정용 원문 페이지: 검수 CSV 행 순서대로 제목·발행일·매체·원문 링크·본문 전체. LLM 판정은 넣지 않는다."""
+    review = pd.read_csv(path, encoding="utf-8-sig", dtype=str, keep_default_na=False)
+    conn = db.connect(db_path)
+    try:
+        news = db.read_table(conn, "news", columns=["news_id", "media", "url", "content"]).set_index("news_id")
+    finally:
+        conn.close()
+    esc = html.escape
+    parts = []
+    for i, r in enumerate(review.itertuples(index=False), start=1):
+        n = news.loc[r.news_id]
+        body = esc(n["content"] or "").replace("\n", "<br>")
+        cross = " · <b>교차 검수 대상</b>" if i <= 25 else ""
+        parts.append(
+            f'<section id="r{i}"><h2><span class="no">{i}</span>{esc(r.title)}</h2>'
+            f'<p class="meta">{esc(r.published_at)} · {esc(n["media"] or "")} · {esc(r.quarter)}{cross} · '
+            f'<a href="{esc(n["url"])}" target="_blank">원문 링크</a> · <code>{esc(r.news_id)}</code></p>'
+            f'<div class="body">{body}</div></section>')
+    toc = " ".join(f'<a href="#r{i}">{i}</a>' for i in range(1, len(review) + 1))
+    doc = f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
+<title>감성 검수 원문 {len(review)}건 ({prompts.PROMPT_VERSION})</title>
+<style>body{{font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;max-width:860px;margin:0 auto;padding:16px;line-height:1.7;color:#222}}
+nav{{position:sticky;top:0;background:#fff;padding:8px 0;border-bottom:1px solid #ddd;font-size:13px}}nav a{{margin-right:6px}}
+section{{border-bottom:1px solid #eee;padding:18px 0}}h2{{font-size:18px;margin:0 0 4px}}.no{{display:inline-block;min-width:34px;color:#888}}
+.meta{{color:#666;font-size:13px;margin:0 0 8px}}.body{{font-size:15px}}.guide{{background:#f6f7f9;padding:10px 14px;border-radius:6px;font-size:14px}}</style></head><body>
+<h1>감성 검수 원문 (표본 {len(review)}건, 번호 = CSV 행 순서)</h1>
+<div class="guide">기사마다 <b>SK하이닉스</b>·<b>삼성전자</b> 입장을 각각 판정: 안 나오면 <b>해당없음</b> → HBM 사업에 유리하면 <b>긍정</b>,
+불리하면 <b>부정</b> → 판단이 어렵거나 이름만 스치면 <b>중립</b>. 기사에 나온 내용만 근거로 한다. LLM 판정은 이 페이지에 없다.</div>
+<nav>{toc}</nav>{"".join(parts)}</body></html>"""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(doc, encoding="utf-8")
+    print(f"원문 페이지 {len(review)}건 저장: {out} (브라우저로 열기)")
+    return out
+
+
 def main(argv: list | None = None) -> None:
     parser = argparse.ArgumentParser(description="LLM 기업별 감성 분류 표본 검수")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -232,9 +272,12 @@ def main(argv: list | None = None) -> None:
     p_sample.add_argument("--n", type=int, default=SAMPLE_SIZE, help=f"표본 수 (기본 {SAMPLE_SIZE})")
     p_sample.add_argument("--force", action="store_true", help="이미 있는 검수 파일을 덮어쓴다 (라벨이 지워짐)")
     sub.add_parser("score", help="사람 라벨과 LLM 판정 비교")
+    sub.add_parser("html", help="판정용 원문 페이지 (본문 전체·원문 링크)")
     args = parser.parse_args(argv)
     if args.cmd == "sample":
         sample_main(n=args.n, force=args.force)
+    elif args.cmd == "html":
+        html_main()
     else:
         score_main()
 

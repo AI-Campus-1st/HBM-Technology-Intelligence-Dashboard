@@ -140,3 +140,15 @@ def test_score_main_end_to_end(db_path, tmp_path):
                           report_dir=tmp_path).set_index("company")
     assert (table["accuracy"] == 1.0).all() and (table["n"] == 4).all()
     assert (tmp_path / "score.csv").exists()
+
+
+def test_html_main_writes_full_text_without_llm_labels(db_path, tmp_path):
+    review = tmp_path / "review.csv"
+    s = vs.sample_main(n=3, path=review, db_path=db_path)
+    out = vs.html_main(path=review, db_path=db_path, out=tmp_path / "view.html")
+    text = out.read_text(encoding="utf-8")
+    assert text.startswith("<!DOCTYPE html>")
+    for i, nid in enumerate(s["news_id"], start=1):
+        assert f'id="r{i}"' in text and nid in text   # 번호 = CSV 행 순서
+    assert "본문" * 400 in text                       # 본문 전체 (500자 head가 아님)
+    assert "sentiment_skh" not in text and "긍정</td>" not in text  # LLM 판정 없음
