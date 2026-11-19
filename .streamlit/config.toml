@@ -1,5 +1,11 @@
+# 대시보드 공통 어두운 테마 (dashboard/components/theme.py와 같은 색, Spotify 디자인 문서 참조)
+# config로 정할 수 없는 모양(알약 버튼·사이드바 등)은 각 페이지에서 theme.apply_theme()가 CSS로 넣는다.
 [theme]
-base = "light"
+base = "dark"
+primaryColor = "#1ed760"
+backgroundColor = "#121212"
+secondaryBackgroundColor = "#1f1f1f"
+textColor = "#ffffff"
 
 [server]
 runOnSave = true

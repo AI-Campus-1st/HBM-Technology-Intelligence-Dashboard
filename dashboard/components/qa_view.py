@@ -1,12 +1,9 @@
 """
 질문 입력, 답변, 근거 공시 목록 표시 UI.
 
-디자인: Spotify 디자인 문서(getdesign.md, `npx getdesign@latest add spotify`)를 참조한 어두운 테마.
-- 배경 #121212, 카드 #181818·#1f1f1f, 본문 흰색, 보조 글자 #b3b3b3
-- 초록(#1ed760)은 '질문하기' 버튼·활성 상태·답변 표시 같은 핵심 요소에만 쓰고 장식으로 쓰지 않는다
-- 버튼은 알약 모양, 카드는 테두리 없이 배경 명도 차이와 진한 그림자로 구분한다
-- 거절은 빨강(#f3727f), 경고는 주황(#ffa42b)
-이 CSS는 공시 Q&A 페이지 안에서만 적용한다 (.streamlit/config.toml 공용 테마는 그대로).
+디자인: 대시보드 공통 어두운 테마(components/theme.py, Spotify 디자인 문서 참조)를 쓰고,
+이 파일에는 이 페이지에만 있는 요소(.qa-* 머리 영역·지표·답변·근거 카드·공시 목록) CSS만 둔다.
+초록은 '질문하기' 버튼과 '근거 기반 답변' 표시에만, 거절은 빨강으로 표시한다.
 
 HTML 문자열을 만드는 함수(*_html)와 Streamlit에 그리는 함수(render_*)를 나눠 테스트할 수 있게 했다.
 
@@ -20,79 +17,13 @@ import re
 import pandas as pd
 import streamlit as st
 
-GREEN = "#1ed760"
+from dashboard.components import theme
+
+GREEN = theme.GREEN
 EXCERPT_CHARS = 360
 
-THEME_CSS = """
+QA_CSS = """
 <style>
-:root {
-  --bg: #121212; --surface: #181818; --surface-2: #1f1f1f; --card: #252525;
-  --text: #ffffff; --text-2: #b3b3b3; --text-3: #cbcbcb; --line: #4d4d4d;
-  --green: #1ed760; --red: #f3727f; --orange: #ffa42b; --blue: #539df5;
-  --shadow: rgba(0,0,0,0.3) 0px 8px 8px; --shadow-heavy: rgba(0,0,0,0.5) 0px 8px 24px;
-}
-.stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] { background: var(--bg); color: var(--text); }
-[data-testid="stSidebar"] { background: #000000; }
-[data-testid="stSidebar"] * { color: var(--text-2); }
-[data-testid="stSidebarNav"] a[aria-current="page"] span { color: var(--text); font-weight: 700; }
-html, body, .stApp, .stApp p, .stApp label, .stApp input, .stApp button, .stApp textarea {
-  font-family: "Pretendard", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
-}
-.stApp p, .stApp label, .stApp span, .stApp li { color: var(--text-3); line-height: 1.5; }
-.stApp h1, .stApp h2, .stApp h3 { color: var(--text); letter-spacing: -0.01em; line-height: 1.3; }
-[data-testid="stCaptionContainer"], .stApp small { color: var(--text-2) !important; }
-hr { border-color: #2a2a2a !important; }
-
-/* 입력: 알약 모양 검색창 */
-.stApp [data-testid="stTextInput"] input {
-  background: var(--surface-2); color: var(--text); border-radius: 500px; padding: 14px 22px;
-  border: none; box-shadow: rgb(18,18,18) 0px 1px 0px, rgb(124,124,124) 0px 0px 0px 1px inset;
-}
-.stApp [data-testid="stTextInput"] input::placeholder { color: #7c7c7c; }
-.stApp [data-testid="stTextInput"] input:focus { box-shadow: 0 0 0 2px var(--text) inset; }
-.stApp [data-testid="stTextInput"] div[data-baseweb="input"],
-.stApp [data-testid="stTextInput"] div[data-baseweb="base-input"] { background: transparent; border: none; }
-
-/* 버튼: 기본은 어두운 알약, 주요 버튼(질문하기)만 초록 */
-.stApp .stButton button, .stApp [data-testid="stFormSubmitButton"] button {
-  border-radius: 9999px; background: var(--surface-2); color: var(--text); border: none;
-  font-weight: 700; font-size: 14px; padding: 8px 18px; transition: background .15s, transform .15s;
-}
-.stApp .stButton button:hover, .stApp [data-testid="stFormSubmitButton"] button:hover { background: #2a2a2a; color: var(--text); }
-.stApp [data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"], .stApp .stButton button[kind="primary"] {
-  background: var(--green); color: #000000; letter-spacing: 0.14px; padding: 12px 18px; white-space: nowrap;
-}
-.stApp [data-testid="stFormSubmitButton"] button p { color: #000000; font-weight: 700; white-space: nowrap; overflow: visible; }
-.stApp [data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"]:hover { background: #3be477; transform: scale(1.03); }
-.stApp [data-testid="stForm"] { border: none; padding: 0; }
-
-/* 알약 선택(예시 질문, 필터) */
-.stApp [data-testid="stButtonGroup"] button {
-  border-radius: 9999px; background: var(--surface-2); color: var(--text); border: none; font-size: 13px;
-}
-.stApp [data-testid="stButtonGroup"] button:hover { background: #2a2a2a; color: var(--text); }
-.stApp [data-testid="stButtonGroup"] button[aria-checked="true"],
-.stApp [data-testid="stButtonGroup"] button[aria-pressed="true"],
-.stApp [data-testid="stButtonGroup"] button[data-selected="true"] { background: var(--text) !important; color: #000000; border: none; }
-.stApp [data-testid="stButtonGroup"] button[aria-checked="true"] *,
-.stApp [data-testid="stButtonGroup"] button[aria-pressed="true"] * { color: #000000; }
-
-/* 토글: 켜짐은 초록 (활성 상태) */
-.stApp [data-testid="stCheckbox"] label span, .stApp [data-baseweb="checkbox"] div { color: var(--text-3); }
-.stApp [data-baseweb="checkbox"] input:checked + div,
-.stApp [data-testid="stCheckbox"] label[data-selected="true"] > span + div { background: var(--green) !important; }
-
-/* 펼치기 */
-.stApp [data-testid="stExpander"] details { background: var(--surface); border: none; border-radius: 8px; }
-.stApp [data-testid="stExpander"] summary p { color: var(--text); font-weight: 600; }
-/* 펼침 머리글: 공용 밝은 테마의 배경(흰색)이 열린 뒤 남아 글자가 안 보이므로 어두운 색으로 고정 */
-.stApp [data-testid="stExpander"] summary,
-.stApp [data-testid="stExpander"] summary:hover,
-.stApp [data-testid="stExpander"] summary:focus { background: var(--surface) !important; color: var(--text); border-radius: 8px; }
-.stApp [data-testid="stExpander"] summary:hover { background: var(--surface-2) !important; }
-.stApp [data-testid="stExpander"] summary svg { fill: var(--text); color: var(--text); }
-.stApp [data-testid="stAlert"] { background: var(--surface-2); border-radius: 8px; color: var(--text-3); }
-
 /* 이 페이지 전용 요소 */
 .qa-hero { padding: 28px 28px 22px; border-radius: 8px; margin-bottom: 18px;
   background: linear-gradient(180deg, #2a2a2a 0%, var(--bg) 100%); }
@@ -243,7 +174,9 @@ def disclosure_list_html(df: pd.DataFrame) -> str:
 
 # ── Streamlit에 그리기 ──
 def apply_theme() -> None:
-    st.markdown(THEME_CSS, unsafe_allow_html=True)
+    """공통 테마 + 이 페이지 전용 CSS."""
+    theme.apply_theme()
+    st.markdown(QA_CSS, unsafe_allow_html=True)
 
 
 def render_html(markup: str) -> None:

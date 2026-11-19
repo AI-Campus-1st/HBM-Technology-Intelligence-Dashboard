@@ -122,3 +122,20 @@ def test_answer_html_shows_saved_note():
     r = qa_chain.QAResult("q", "답", True, None, None, 1)
     assert 'qa-badge saved">저장된 답변 · 2026-11-18 생성' in qa_view.answer_html(r, "저장된 답변 · 2026-11-18 생성")
     assert "saved" not in qa_view.answer_html(r)
+
+
+def test_common_theme_shared_by_pages_and_config():
+    from pathlib import Path
+
+    from dashboard.components import theme
+    root = Path(__file__).resolve().parents[1]
+    # 공통 CSS는 theme에, 탭 2 전용 CSS(.qa-*)는 qa_view에만 있다
+    assert "--bg: #121212" in theme.THEME_CSS and ".qa-" not in theme.THEME_CSS
+    assert ".qa-hero" in qa_view.QA_CSS and ":root" not in qa_view.QA_CSS
+    # 공용 config.toml도 같은 색이다
+    cfg = (root / ".streamlit" / "config.toml").read_text(encoding="utf-8")
+    assert 'base = "dark"' in cfg and theme.COLORS["bg"] in cfg and theme.GREEN in cfg
+    # 모든 페이지가 공통 테마를 부른다
+    pages = [root / "dashboard" / "app.py", *sorted((root / "dashboard" / "pages").glob("*.py"))]
+    for page in pages:
+        assert "apply_theme()" in page.read_text(encoding="utf-8"), page.name

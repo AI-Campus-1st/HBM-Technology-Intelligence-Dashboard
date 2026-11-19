@@ -33,7 +33,7 @@ from src.common import config  # noqa: E402
 from src.llm import prompts  # noqa: E402
 
 st.set_page_config(page_title="이슈 분석 · HBM 대시보드", page_icon="📈", layout="wide")
-qa_view.apply_theme()
+qa_view.apply_theme()  # 공통 테마(theme.apply_theme, 리포트 6.1) + 카드·지표 모양은 탭 2의 .qa-* CSS를 재사용
 PLOT_CONFIG = {"displayModeBar": False}
 
 if not config.DB_PATH.exists():
