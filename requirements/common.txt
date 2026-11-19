@@ -5,3 +5,6 @@ python-dotenv==1.2.4
 plotly==7.1.0
 streamlit==1.67.0
 pytest==9.2.0
+# 간접 의존성: brotlicffi 1.1.0.0 + urllib3 2.8.0이면 OpenAI 응답 압축 해제가 실패해 LLM 호출이 모두 실패한다 (2026-11-19, 리포트 4.3, 초안 §11 질문 9).
+# 우리가 직접 쓰지 않는 패키지라 버전을 고정하지 않고 하한만 둔다
+brotlicffi>=1.2
