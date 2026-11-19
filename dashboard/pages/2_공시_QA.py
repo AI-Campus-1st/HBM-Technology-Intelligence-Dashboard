@@ -63,8 +63,11 @@ def pick_example():
             push(*saved_answers[q], saved_note)
 
 
-st.caption("예시 질문은 미리 만들어 둔 답변을 바로 보여 주고, 직접 입력한 질문은 실시간으로 답합니다.")
-st.pills("예시 질문", [q for q, _ in qa_chain.SAMPLE_QUESTIONS], key="qa_example", on_change=pick_example)
+# 처음 보는 사람이 바로 누를 수 있게 기본은 펼쳐 두고, 필요 없으면 접는다
+with st.expander(f"예시 질문 ({len(qa_chain.SAMPLE_QUESTIONS)}개)", expanded=True):
+    st.caption("예시 질문은 미리 만들어 둔 답변을 바로 보여 주고, 직접 입력한 질문은 실시간으로 답합니다.")
+    st.pills("예시 질문", [q for q, _ in qa_chain.SAMPLE_QUESTIONS], key="qa_example", on_change=pick_example,
+             label_visibility="collapsed")
 
 with st.form("qa_form", border=False):
     col_q, col_b = st.columns([4, 1], vertical_alignment="bottom")
@@ -103,15 +106,17 @@ if state["qa_history"]:
 # ── RAG 대상 공시 ──
 qa_view.render_html('<div class="qa-section">검색 대상 공시</div>')
 disclosures = loader.load_rag_disclosures()
-corp = st.pills("기업", ["전체", *config.TARGET_COMPANIES], default="전체", key="qa_corp")
-types = st.pills("공시 유형", list(loader.TYPE_NAMES.values()), selection_mode="multi", key="qa_types")
-view = disclosures
-if corp and corp != "전체":
-    view = view[view["corp_name"] == corp]
-if types:
-    view = view[view["type_name"].isin(types)]
-st.caption(f"{len(view)}건 / 전체 {len(disclosures)}건 · 공시명을 누르면 DART 원문이 열립니다.")
-qa_view.render_html(qa_view.disclosure_list_html(view))
+# 목록이 길어(101건) 기본은 접어 두고, 눌러서 열고 닫는다
+with st.expander(f"공시 목록 보기 ({len(disclosures)}건)", expanded=False):
+    corp = st.pills("기업", ["전체", *config.TARGET_COMPANIES], default="전체", key="qa_corp")
+    types = st.pills("공시 유형", list(loader.TYPE_NAMES.values()), selection_mode="multi", key="qa_types")
+    view = disclosures
+    if corp and corp != "전체":
+        view = view[view["corp_name"] == corp]
+    if types:
+        view = view[view["type_name"].isin(types)]
+    st.caption(f"{len(view)}건 / 전체 {len(disclosures)}건 · 공시명을 누르면 DART 원문이 열립니다.")
+    qa_view.render_html(qa_view.disclosure_list_html(view))
 
 st.caption(
     f"LLM {config.LLM_MODEL} · 임베딩 {build_index.EMBEDDING_MODEL} · 검색 상위 {qa_chain.K}개(벡터+키워드 RRF) · "
