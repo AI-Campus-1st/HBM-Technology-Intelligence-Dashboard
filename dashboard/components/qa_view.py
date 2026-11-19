@@ -85,6 +85,12 @@ hr { border-color: #2a2a2a !important; }
 /* 펼치기 */
 .stApp [data-testid="stExpander"] details { background: var(--surface); border: none; border-radius: 8px; }
 .stApp [data-testid="stExpander"] summary p { color: var(--text); font-weight: 600; }
+/* 펼침 머리글: 공용 밝은 테마의 배경(흰색)이 열린 뒤 남아 글자가 안 보이므로 어두운 색으로 고정 */
+.stApp [data-testid="stExpander"] summary,
+.stApp [data-testid="stExpander"] summary:hover,
+.stApp [data-testid="stExpander"] summary:focus { background: var(--surface) !important; color: var(--text); border-radius: 8px; }
+.stApp [data-testid="stExpander"] summary:hover { background: var(--surface-2) !important; }
+.stApp [data-testid="stExpander"] summary svg { fill: var(--text); color: var(--text); }
 .stApp [data-testid="stAlert"] { background: var(--surface-2); border-radius: 8px; color: var(--text-3); }
 
 /* 이 페이지 전용 요소 */
