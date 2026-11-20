@@ -171,3 +171,66 @@ def test_coverage_axis_is_category(paths):
     t = il.issue_table(paths["db"], paths["summary"])
     fig = ic.coverage_figure(cov, t, companies=["SK하이닉스"])
     assert fig.layout.yaxis.type == "category"               # '2024-03'을 날짜로 읽으면 막대가 한 줄로 뭉친다
+
+
+# ── 기간·기업 필터 (Day 6: 필터가 모든 차트에 반영) ──
+def test_month_range_filter(paths):
+    m = il.monthly_share(paths["db"], paths["spikes"])
+    months = il.month_options(m)
+    assert months[0] == "2023-10" and months[-1] == "2026-10"
+    sub = il.in_months(m, "2024-03", "2024-06")
+    assert sub["month"].tolist() == ["2024-03", "2024-04", "2024-05", "2024-06"]
+
+
+def test_issues_overlapping_range(paths):
+    t = il.issue_table(paths["db"], paths["summary"])
+    assert il.issues_in_range(t, "2024-04", "2024-12")["issue_id"].tolist() == ["HBM-2024-06"]
+    assert il.issues_in_range(t, "2024-03", "2024-03")["issue_id"].tolist() == ["HBM-2024-03"]
+
+
+def test_coverage_in_range_matches_sql03_for_full_period(paths):
+    full = il.company_coverage(paths["db"]).set_index("period")
+    mine = il.coverage_in_range(paths["db"], "2023-10", "2026-10").set_index("period")
+    cols = ["hbm_articles", "skh_articles", "sec_articles", "both_articles", "neither_articles"]
+    assert mine.loc[full.index, cols].astype(int).equals(full[cols].astype(int))
+
+
+def test_coverage_in_range_subset(paths):
+    c = il.coverage_in_range(paths["db"], "2024-06", "2024-06").set_index("period")
+    assert list(c.index) == ["HBM-2024-06"] and c.loc["HBM-2024-06", "sec_articles"] == 1
+
+
+def test_company_monthly_counts(paths):
+    c = il.company_monthly(paths["db"]).set_index("month")
+    assert c.loc["2024-03", "skh"] == 1 and c.loc["2024-03", "sec"] == 1  # SK '언급'은 제외
+    assert c.loc["2024-06", "sec"] == 1
+
+
+def test_issue_articles_and_evidence_follow_company(paths, tmp_path):
+    a = il.issue_articles(paths["db"], "2024-03-01", "2024-03-31", company="삼성전자")
+    assert a["news_id"].tolist() == ["b"]                     # a는 삼성 '해당없음' → 제외
+    assert il.issue_evidence(paths["db"], "HBM-2024-03", tmp_path / "x.csv", company="삼성전자").empty
+    assert len(il.issue_evidence(paths["db"], "HBM-2024-03", tmp_path / "x.csv", company="SK하이닉스")) == 1
+
+
+def test_charts_follow_filters(paths):
+    m = il.monthly_share(paths["db"], paths["spikes"])
+    t = il.issue_table(paths["db"], paths["summary"])
+    fig = ic.share_figure(il.in_months(m, "2024-03", "2024-06"), il.issues_in_range(t, "2024-03", "2024-06"),
+                          x_range=ic.month_range("2024-03", "2024-06"))
+    assert list(fig.layout.xaxis.range) == ["2024-03-01", "2024-07-01"]
+    assert len(fig.layout.shapes) == 2
+    cm = il.company_monthly(paths["db"])
+    bars = ic.count_figure(m, company_counts=cm, companies=["삼성전자"])
+    assert [b.name for b in bars.data] == ["삼성전자"] and bars.data[0].marker.color == ic.COMPANY_COLORS["삼성전자"]
+    assert [b.name for b in ic.count_figure(m).data] == ["HBM 기사 수"]  # 전체 = 회색 한 막대
+
+
+def test_range_overview_matches_full_overview(paths):
+    m = il.monthly_share(paths["db"], paths["spikes"])
+    t = il.issue_table(paths["db"], paths["summary"])
+    ev = il.evidence_counts(paths["db"])
+    assert ev == {"HBM-2024-03": 1}
+    assert il.range_overview(m, t, ev) == il.overview(paths["db"], paths["summary"])  # 전체 기간이면 같다
+    part = il.range_overview(il.in_months(m, "2024-06", "2024-06"), il.issues_in_range(t, "2024-06", "2024-06"), ev)
+    assert part["hbm_articles"] == 1 and part["issues"] == 1 and part["verified_evidence"] == 0
