@@ -108,14 +108,14 @@ qa_view.render_html('<div class="qa-section">검색 대상 공시</div>')
 disclosures = loader.load_rag_disclosures()
 # 목록이 길어(101건) 기본은 접어 두고, 눌러서 열고 닫는다
 with st.expander(f"공시 목록 보기 ({len(disclosures)}건)", expanded=False):
+    # 필터: 기간(제출 월)·기업·공시 유형 — 이 목록에 적용한다 (질문 검색 범위와는 무관, 아래 캡션)
+    months = loader.month_options()
+    start, end = st.select_slider("기간 (제출 월)", options=months, value=(months[0], months[-1]), key="qa_period")
     corp = st.pills("기업", ["전체", *config.TARGET_COMPANIES], default="전체", key="qa_corp")
     types = st.pills("공시 유형", list(loader.TYPE_NAMES.values()), selection_mode="multi", key="qa_types")
-    view = disclosures
-    if corp and corp != "전체":
-        view = view[view["corp_name"] == corp]
-    if types:
-        view = view[view["type_name"].isin(types)]
-    st.caption(f"{len(view)}건 / 전체 {len(disclosures)}건 · 공시명을 누르면 DART 원문이 열립니다.")
+    view = loader.filter_disclosures(disclosures, start, end, corp, types)
+    st.caption(f"{len(view)}건 / 전체 {len(disclosures)}건 · 공시명을 누르면 DART 원문이 열립니다. "
+               "필터는 이 목록에만 적용되고, 질문은 항상 공시 전체에서 근거를 찾습니다 (질문에 기업명이 있으면 그 기업 공시로 좁힘).")
     qa_view.render_html(qa_view.disclosure_list_html(view))
 
 st.caption(
