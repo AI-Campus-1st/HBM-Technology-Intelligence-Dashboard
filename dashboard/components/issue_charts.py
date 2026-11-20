@@ -72,11 +72,16 @@ def add_issue_bands(fig: go.Figure, issues: pd.DataFrame, legend: bool = True) -
     return fig
 
 
+def month_range(start: str, end: str) -> list[str]:
+    """가로축 범위: 시작 달 1일 ~ 끝 달 다음 달 1일 (기간 필터와 축을 맞춘다)."""
+    return [f"{start}-01", _month_end(end)]
+
+
 def _x(months: pd.Series) -> pd.Series:
     return pd.to_datetime(months + "-15")  # 막대·점을 달 가운데에 둔다
 
 
-def share_figure(monthly: pd.DataFrame, issues: pd.DataFrame, height: int = 340) -> go.Figure:
+def share_figure(monthly: pd.DataFrame, issues: pd.DataFrame, height: int = 340, x_range: list[str] | None = None) -> go.Figure:
     """월별 HBM 비중 선 + 급증 달 점 + 급증 구간 띠. 문턱(직전 6개월 평균 + 2σ)은 점선."""
     m = monthly.copy()
     x = _x(m["month"])
@@ -92,18 +97,31 @@ def share_figure(monthly: pd.DataFrame, issues: pd.DataFrame, height: int = 340)
                              hoverinfo="skip"))
     add_issue_bands(fig, issues)
     fig = _layout(fig, height, "HBM 기사 비중", ".0%")
-    fig.update_xaxes(range=X_RANGE, tickformat="%Y-%m")
+    fig.update_xaxes(range=x_range or X_RANGE, tickformat="%Y-%m")
     return fig
 
 
-def count_figure(monthly: pd.DataFrame, height: int = 180) -> go.Figure:
-    """월별 HBM 기사 수 (비중과 단위가 달라 차트를 나눈다)."""
-    m = monthly
-    fig = go.Figure(go.Bar(x=_x(m["month"]), y=m["hbm"], name="HBM 기사 수", marker=dict(color="#7c7c7c"),
-                           hovertemplate="HBM 기사 %{y}건<extra></extra>"))
+def count_figure(monthly: pd.DataFrame, height: int = 180, x_range: list[str] | None = None,
+                 company_counts: pd.DataFrame | None = None, companies: list[str] | None = None) -> go.Figure:
+    """월별 HBM 기사 수 (비중과 단위가 달라 차트를 나눈다).
+
+    기업을 하나 고르면 그 기업이 나온 HBM 기사 수를 기업 색으로 그린다 (기업 필터 반영). 전체면 회색 한 막대.
+    """
+    fig = go.Figure()
+    if company_counts is not None and companies and len(companies) == 1:
+        comp = companies[0]
+        c = company_counts[company_counts["month"].isin(set(monthly["month"]))]
+        col = "skh" if comp == "SK하이닉스" else "sec"
+        fig.add_trace(go.Bar(x=_x(c["month"]), y=c[col], name=comp, marker=dict(color=COMPANY_COLORS[comp]),
+                             hovertemplate=f"{comp} HBM 기사 %{{y}}건<extra></extra>"))
+        title = f"{COMPANY_SHORT[comp]} HBM 기사 수 (건)"
+    else:
+        fig.add_trace(go.Bar(x=_x(monthly["month"]), y=monthly["hbm"], name="HBM 기사 수", marker=dict(color="#7c7c7c"),
+                             hovertemplate="HBM 기사 %{y}건<extra></extra>"))
+        title = "HBM 기사 수 (건)"
     fig.update_layout(showlegend=False)
-    fig = _layout(fig, height, "HBM 기사 수 (건)")
-    fig.update_xaxes(range=X_RANGE, tickformat="%Y-%m")
+    fig = _layout(fig, height, title)
+    fig.update_xaxes(range=x_range or X_RANGE, tickformat="%Y-%m")
     return fig
 
 
@@ -131,7 +149,8 @@ def coverage_figure(coverage: pd.DataFrame, issues: pd.DataFrame, companies: lis
     return fig
 
 
-def sentiment_figure(sentiment: pd.DataFrame, issues: pd.DataFrame, companies: list[str], height: int = 320) -> go.Figure:
+def sentiment_figure(sentiment: pd.DataFrame, issues: pd.DataFrame, companies: list[str], height: int = 320,
+                     x_range: list[str] | None = None) -> go.Figure:
     """기업별 3개월 순감성 (−1 ~ 1, 0 = 긍정·부정 같음) + 급증 구간 띠. 월 순감성·기사 수는 hover."""
     fig = go.Figure()
     for comp in companies:
@@ -147,7 +166,7 @@ def sentiment_figure(sentiment: pd.DataFrame, issues: pd.DataFrame, companies: l
     add_issue_bands(fig, issues)
     fig = _layout(fig, height, "3개월 순감성")
     fig.update_yaxes(range=[-1.05, 1.05], tickformat="+.1f")
-    fig.update_xaxes(range=X_RANGE, tickformat="%Y-%m")
+    fig.update_xaxes(range=x_range or X_RANGE, tickformat="%Y-%m")
     return fig
 
 

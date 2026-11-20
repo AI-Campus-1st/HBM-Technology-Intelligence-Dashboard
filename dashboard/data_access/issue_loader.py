@@ -19,6 +19,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.common import config, db
+from src.eda import news_trend
 from src.dart.sql_report import run_query
 from src.llm import prompts
 
@@ -80,6 +81,44 @@ def issue_table(db_path: Path = config.DB_PATH, summary_path: Path = SUMMARY_PAT
     return t.sort_values(["_o", "start_date"]).drop(columns="_o").reset_index(drop=True)
 
 
+# ── 기간·기업 필터 (화면의 필터가 모든 차트에 같은 기준으로 걸리도록 한곳에 둔다) ──
+COMPANY_COL = {"SK하이닉스": "sentiment_skh", "삼성전자": "sentiment_sec"}
+
+
+def month_options(monthly: pd.DataFrame) -> list[str]:
+    """기간 선택지: 분석 기간 전체 월 (YYYY-MM)."""
+    return monthly["month"].tolist()
+
+
+def in_months(df: pd.DataFrame, start: str, end: str, col: str = "month") -> pd.DataFrame:
+    """월 열이 start~end(YYYY-MM, 양 끝 포함)인 행."""
+    return df[(df[col] >= start) & (df[col] <= end)].reset_index(drop=True)
+
+
+def issues_in_range(issues: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
+    """선택 기간과 한 달이라도 겹치는 급증 구간 (원래 순서 유지)."""
+    s, e = issues["start_date"].str[:7], issues["end_date"].str[:7]
+    return issues[(s <= end) & (e >= start)].reset_index(drop=True)
+
+
+def coverage_in_range(db_path: Path, start: str, end: str) -> pd.DataFrame:
+    """SQL 03(급증 구간별 기업 점유)을 선택 기간(YYYY-MM) 안의 기사로만 계산한다. 전체 기간이면 SQL 03과 같다 (테스트로 대조)."""
+    sql = (SQL_DIR / "03_issue_company_coverage.sql").read_text(encoding="utf-8")
+    sql = sql.replace("    WHERE n.is_duplicate = 0\n),\ncompany AS",
+                      "    WHERE n.is_duplicate = 0 AND substr(n.published_at, 1, 7) BETWEEN :start AND :end\n),\ncompany AS")
+    assert ":start" in sql, "SQL 03 구조가 바뀌었다 — coverage_in_range의 기간 조건 위치를 확인할 것"
+    conn = db.connect(db_path)
+    try:
+        return pd.read_sql_query(sql, conn, params={"start": start, "end": end})
+    finally:
+        conn.close()
+
+
+def company_monthly(db_path: Path = config.DB_PATH) -> pd.DataFrame:
+    """월별 HBM 기사 중 기업 태그(핵심·관련) 기사 수 — news_trend.company_monthly를 그대로 쓴다 (리포트 3.1과 같은 정의)."""
+    return news_trend.company_monthly(news_trend.load_articles(db_path))
+
+
 def company_coverage(db_path: Path = config.DB_PATH) -> pd.DataFrame:
     """급증 구간별 HBM 기사의 기업 점유 vs 구간 밖 (SQL 03)."""
     return _query(db_path, "03_issue_company_coverage.sql")
@@ -101,9 +140,14 @@ _HBM_ARTICLES = """
 """
 
 
-def issue_articles(db_path: Path, start: str, end: str, limit: int = 8) -> pd.DataFrame:
-    """구간 안 HBM 기사 (제목에 HBM이 있는 '핵심' 먼저, 같은 등급은 발행일 순) + 기업별 감성."""
-    sql = _HBM_ARTICLES + " ORDER BY CASE t.relevance WHEN '핵심' THEN 0 ELSE 1 END, n.published_at, n.news_id LIMIT ?"
+def issue_articles(db_path: Path, start: str, end: str, limit: int = 8, company: str | None = None) -> pd.DataFrame:
+    """구간 안 HBM 기사 (제목에 HBM이 있는 '핵심' 먼저, 같은 등급은 발행일 순) + 기업별 감성.
+
+    company를 주면 그 기업이 등장한(LLM 판정이 '해당없음'이 아닌) 기사만.
+    """
+    where = f" AND a.{COMPANY_COL[company]} IS NOT NULL AND a.{COMPANY_COL[company]} <> '해당없음'" if company else ""
+    sql = (_HBM_ARTICLES + where +
+           " ORDER BY CASE t.relevance WHEN '핵심' THEN 0 ELSE 1 END, n.published_at, n.news_id LIMIT ?")
     return _read(db_path, sql, (prompts.PROMPT_VERSION, start, end, limit))
 
 
@@ -120,7 +164,8 @@ def period_sentiment(db_path: Path, start: str, end: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def issue_evidence(db_path: Path, issue_id: str, review_path: Path = EVIDENCE_REVIEW_PATH) -> pd.DataFrame:
+def issue_evidence(db_path: Path, issue_id: str, review_path: Path = EVIDENCE_REVIEW_PATH,
+                   company: str | None = None) -> pd.DataFrame:
     """사람이 확인한(verified = 1) 근거 공시와 연결 기사 제목.
 
     DB의 note는 자동 생성 메모(연결 규칙·주제 등)와 사람 메모가 이어 붙어 있어 화면에 길다.
@@ -140,7 +185,23 @@ def issue_evidence(db_path: Path, issue_id: str, review_path: Path = EVIDENCE_RE
         r = pd.read_csv(review_path, encoding="utf-8-sig", dtype=str, keep_default_na=False)
         human = {(a, b, c): n for a, b, c, n in zip(r["issue_id"], r["rcept_no"], r["match_type"], r["note"])}
     e["note"] = [human.get((a, b, c), "") for a, b, c in zip(e["issue_id"], e["rcept_no"], e["match_type"])]
+    if company:  # 기업 필터: 그 기업이 낸 공시만
+        e = e[e["corp_name"] == company].reset_index(drop=True)
     return e
+
+
+def evidence_counts(db_path: Path = config.DB_PATH) -> dict:
+    """급증 구간별 사람이 확인한(verified = 1) 근거 공시 수 {issue_id: n} — 기간 필터에 맞춰 요약 지표를 다시 셀 때 쓴다."""
+    df = _read(db_path, "SELECT issue_id, COUNT(*) AS n FROM issue_evidence WHERE verified = 1 GROUP BY issue_id")
+    return dict(zip(df["issue_id"], df["n"].astype(int)))
+
+
+def range_overview(monthly: pd.DataFrame, issues: pd.DataFrame, evidence: dict) -> dict:
+    """기간 필터를 적용한 요약 숫자 (overview와 같은 키). monthly·issues는 이미 기간으로 거른 표."""
+    return {"articles": int(monthly["total"].sum()), "hbm_articles": int(monthly["hbm"].sum()),
+            "issues": len(issues), "confirmed": int((issues["status"] == "확정").sum()),
+            "excluded": int((issues["status"] == "제외").sum()),
+            "verified_evidence": int(sum(evidence.get(i, 0) for i in issues["issue_id"]))}
 
 
 def eval_summary(path: Path = EVAL_PATH) -> dict:
