@@ -240,3 +240,10 @@ def test_disclosure_links(paths):
     d = il.disclosure_links(paths["db"], ["r2", "nope"])
     assert d.to_dict("records") == [{"rcept_no": "r2", "url": "https://dart/r2"}]
     assert il.disclosure_links(paths["db"], []).empty
+
+
+def test_stats_html_accuracy_label_matches_report(paths):
+    """요약 타일의 정확도 표기는 리포트 4.5·6.5.1 정의(4분류 정확도, 기업별 사람 라벨 수)와 같아야 한다."""
+    html = ic.stats_html(il.overview(paths["db"], paths["summary"]), il.eval_summary(paths["eval"]))
+    assert "0.78 · 0.88" in html and "감성 4분류 정확도" in html and "기업별 사람 라벨 50건" in html
+    assert "표본" not in html

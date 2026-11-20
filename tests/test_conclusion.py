@@ -5,6 +5,9 @@
 일정: Day 7
 """
 
+import ast
+import json
+
 import pandas as pd
 import pytest
 
@@ -55,3 +58,30 @@ def test_highlights_reference_verified_evidence_only():
     review = pd.read_csv(cc.REVIEW_PATH, dtype=str, keep_default_na=False)
     verified = set(review.loc[review["verified"] == "1", "rcept_no"])
     assert ids and ids <= verified                                    # 결론 인용은 사람이 확인한 공시만
+
+
+def _norm(text: str) -> str:
+    return "".join(text.split()).replace("’", "'").replace("‘", "'")
+
+
+def test_highlight_quotes_appear_verbatim_on_cited_page():
+    """인용 문구가 공시 첨부 PDF의 해당 쪽 텍스트에 그대로 있는지 확인 (verified=1만으로는 문구를 보증하지 못한다, 리포트 6.5.1).
+
+    추출 텍스트는 단 구분을 잃기 때문에, 문구가 어느 단('25.1분기 현황/전망)에 속하는지는 PDF를 직접 보고 doc에 적었다.
+    data/processed는 git에 없으므로 파일이 없으면 건너뛴다.
+    """
+    path = cc.config.PROCESSED_DIR / "disclosure_attachments.jsonl"
+    if not path.exists():
+        pytest.skip("disclosure_attachments.jsonl 없음 (data/processed는 git 제외)")
+    pages = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        d = json.loads(line)
+        doc = ast.literal_eval(d["pages"]) if isinstance(d["pages"], str) else d["pages"]   # 쪽별 텍스트 목록
+        pages.setdefault(d["rcept_no"], []).append(doc)
+    for h in cc.EVIDENCE_HIGHLIGHTS:
+        docs = pages.get(h["rcept_no"])
+        assert docs, h["rcept_no"]
+        assert " / ".join(t for _, t in h["excerpts"]) == h["quote"]          # 화면 인용 = 대조한 원문
+        for page, text in h["excerpts"]:
+            found = any(len(doc) >= page and _norm(text) in _norm(doc[page - 1]) for doc in docs)
+            assert found, f"{h['rcept_no']} p.{page}: {text}"

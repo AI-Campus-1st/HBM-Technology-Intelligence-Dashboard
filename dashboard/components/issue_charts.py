@@ -243,7 +243,7 @@ def stats_html(o: dict, ev: dict) -> str:
     items = [
         (f'{o["hbm_articles"] / o["articles"]:.1%}' if o["articles"] else "-", "전체 기사 중 HBM 비중"),
         (f'{o["confirmed"]} / {o["issues"]}', "급증 구간 (공시로 확인 / 전체)"),
-        (f'{acc("SK하이닉스")} · {acc("삼성전자")}', f"감성 분류 정확도 SK·삼성 (표본 {n}건)"),
+        (f'{acc("SK하이닉스")} · {acc("삼성전자")}', f"감성 4분류 정확도 SK·삼성 (기업별 사람 라벨 {n}건)"),
         (o["verified_evidence"], "사람이 확인한 근거 공시"),
     ]
     cells = "".join(f'<div class="qa-stat"><div class="v">{esc(v)}</div><div class="l">{esc(l)}</div></div>' for v, l in items)
