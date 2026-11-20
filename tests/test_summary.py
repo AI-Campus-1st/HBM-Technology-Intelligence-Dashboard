@@ -73,3 +73,24 @@ def test_recommendation_quotes_match_verified_evidence():
     """권고 1번의 SK하이닉스 수치는 사람이 확인한 공시 인용과 같다."""
     quotes = " ".join(h["quote"] for h in cc.EVIDENCE_HIGHLIGHTS)
     assert "70% 이상" in quotes and "2배 이상" in quotes
+
+
+EARNINGS = pd.DataFrame({"corp_name": ["SK하이닉스", "삼성전자"], "releases": [12, 12], "articles": [5, 33]})
+
+
+def test_earnings_sentence_limits_claim_to_collected_news():
+    """'과소 보도' 단정 대신 수집 데이터 안의 숫자로만 말한다 (리포트 6.5.1)."""
+    s = sm.earnings_sentence(EARNINGS)
+    assert "수집한 뉴스" in s and "각 12회" in s and "SK하이닉스 5건, 삼성전자 33건" in s
+    assert "언론 전체 보도량을 뜻하지는 않는다" in s
+    for word in ("과소평가", "거의 없다"):
+        assert word not in s
+    assert "판단하기는 어렵다" in sm.earnings_sentence(None)          # 숫자가 없으면 단정 없이 한계만
+
+
+def test_cards_and_recommendation_use_hedged_earnings_sentence(facts, tables):  # noqa: F811
+    links = pd.DataFrame(columns=["rcept_no", "url"])
+    for html in (sm.cards_html(facts, tables[0], links, EARNINGS), sm.recommend_html(facts, EARNINGS)):
+        assert "SK하이닉스 5건, 삼성전자 33건" in html
+        assert "과소평가" not in html and "거의 없다" not in html
+    assert "‘’" not in sm.cards_html(facts, tables[0], links, EARNINGS)   # 원문 ’25와 따옴표가 겹치지 않음

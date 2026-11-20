@@ -42,6 +42,7 @@ def load_summary(_key: float) -> dict:
         "monthly": il.monthly_share(), "issues": il.issue_table(), "coverage": il.company_coverage(),
         "sentiment": il.sentiment_monthly(), "eval": il.eval_summary(),
         "links": il.disclosure_links(config.DB_PATH, [h["rcept_no"] for h in cc.EVIDENCE_HIGHLIGHTS]),
+        "earnings": il.earnings_news_counts(),
     }
 
 
@@ -49,8 +50,8 @@ data = load_summary(DB_KEY)
 facts = cc.compute_facts(data["monthly"], data["issues"], data["coverage"], data["sentiment"], data["eval"])
 
 qa_view.render_html(sm.hero_html(facts))
-qa_view.render_html(sm.cards_html(facts, data["monthly"], data["links"]))
-qa_view.render_html(sm.recommend_html(facts))
+qa_view.render_html(sm.cards_html(facts, data["monthly"], data["links"], data["earnings"]))
+qa_view.render_html(sm.recommend_html(facts, data["earnings"]))
 qa_view.render_html(sm.limits_html(facts))
 
 qa_view.render_html('<div class="qa-section">근거 자세히 보기</div>')
