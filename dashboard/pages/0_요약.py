@@ -2,7 +2,7 @@
 요약 (첫 화면). "이 산업에서 지금 무슨 일이 일어나고 있으며, 그 판단의 근거는 무엇인가"에 한 화면으로 답한다.
 저장된 분석 결과만 읽고 LLM·API를 부르지 않는다.
 
-화면: ① 질문 → ② 한 줄 답 → ③ 근거 카드 3장 → ④ 한계 → 근거 자세히 보기(이슈 분석·공시 Q&A로 이동)
+화면: ① 질문 → ② 한 줄 답 → ③ 근거 카드 3장 → ④ 애널리스트에게 권하는 다음 단계 → 한계 → 근거 자세히 보기(이슈 분석·공시 Q&A로 이동)
 결론은 전체 분석 기간 기준이라 필터가 없다. 기간·기업을 바꿔 보는 것은 이슈 분석에서 한다.
 숫자: components/conclusion.compute_facts (김한승 초안), 화면 조각: components/summary (리포트 6.5)
 실행: streamlit run dashboard/app.py → 첫 화면
@@ -50,6 +50,7 @@ facts = cc.compute_facts(data["monthly"], data["issues"], data["coverage"], data
 
 qa_view.render_html(sm.hero_html(facts))
 qa_view.render_html(sm.cards_html(facts, data["monthly"], data["links"]))
+qa_view.render_html(sm.recommend_html(facts))
 qa_view.render_html(sm.limits_html(facts))
 
 qa_view.render_html('<div class="qa-section">근거 자세히 보기</div>')

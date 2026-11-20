@@ -55,3 +55,21 @@ def test_sparkline_marks_peak_and_skips_partial_months(tables):  # noqa: F811
 def test_limits_state_what_cannot_be_confirmed(facts):
     html = sm.limits_html(facts)
     assert "HBM 투자액" in html and "0.78" in html and "표본 50건" in html
+
+
+def test_recommendation_targets_persona_without_investment_opinion(facts):
+    html = sm.recommend_html(facts)
+    assert sm.PERSONA in html and sm.RECOMMEND_LEAD in html
+    assert html.count("<li>") == 4
+    assert f"{facts['recent_share']:.1%}" in html                 # 보도 비중은 계산값
+    assert "투자 의견이 아니다" in html                              # 페르소나 범위: 투자 의견·목표주가 없음
+    for word in ("매수", "매도", "목표주가", "비중 확대"):
+        assert word not in html
+    assert f'href="{sm.QA_PAGE}"' in html and sm.HBM4_QUESTION in html
+    assert "~" not in html
+
+
+def test_recommendation_quotes_match_verified_evidence():
+    """권고 1번의 SK하이닉스 수치는 사람이 확인한 공시 인용과 같다."""
+    quotes = " ".join(h["quote"] for h in cc.EVIDENCE_HIGHLIGHTS)
+    assert "70% 이상" in quotes and "2배 이상" in quotes
