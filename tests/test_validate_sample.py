@@ -173,3 +173,51 @@ def test_score_main_compares_other_llm_version_on_same_sample(db_path, tmp_path)
     assert t.loc["삼성전자", "accuracy"] == 1.0          # sec는 그대로
     assert t.loc["SK하이닉스", "accuracy"] < 1.0          # skh는 모두 해당없음으로 바꿈
     assert vs.REVIEW_PATH.name == "sentiment_review_sent_v1.csv"  # 표본 파일은 v1 고정
+
+
+# ── 이슈 키워드 검수 (가이드 3-1·6: 핵심 이슈 추출 정확도 표본 검수) ──
+def kw_review_frame():
+    review = pd.DataFrame({"news_id": [f"n{i}" for i in range(4)], "published_at": ["2024.01.0%d" % (i + 1) for i in range(4)],
+                           "title": [f"제목{i}" for i in range(4)]})
+    keywords = pd.DataFrame({"news_id": ["n0", "n1", "n2", "n3"],
+                             "issue_keywords": ['["HBM3E 인증", "엔비디아 공급"]', '["대중 수출 규제"]', "[]",
+                                                '["HBM4 양산", "가격 하락", "실적 악화"]']})
+    return review, keywords
+
+
+def test_build_keyword_review_takes_first_rows_with_llm_keywords_and_blank_judgments():
+    review, keywords = kw_review_frame()
+    kw = vs.build_keyword_review(review, keywords, rows=3)
+    assert list(kw.columns) == vs.KW_COLUMNS
+    assert kw["row"].tolist() == [1, 2, 3] and kw["news_id"].tolist() == ["n0", "n1", "n2"]  # 감성 표본과 같은 행 번호
+    assert kw.loc[0, "keywords"] == "HBM3E 인증 | 엔비디아 공급" and kw["kw_total"].tolist() == [2, 1, 0]
+    assert (kw["kw_correct"] == "").all() and (kw["kw_core"] == "").all()   # 판정 칸은 사람이 채운다
+
+
+def test_keyword_score_precision_and_core_capture():
+    kw = pd.DataFrame({"row": [1, 2, 3, 4], "kw_total": [2, 1, 3, 2], "kw_correct": ["2", "0", "2", ""],
+                       "kw_core": ["1", "0", "1", ""]})
+    t = vs.keyword_score(kw).iloc[0]
+    assert t["n_articles"] == 3                                    # 판정이 빈 행(4)은 뺀다
+    assert t["kw_total"] == 6 and t["kw_correct"] == 4
+    assert t["precision"] == pytest.approx(4 / 6) and t["core_capture"] == pytest.approx(2 / 3)
+    assert 0 <= t["precision_ci_low"] < t["precision"] < t["precision_ci_high"] <= 1
+    assert 0 <= t["core_ci_low"] < t["core_capture"] < t["core_ci_high"] <= 1
+    assert t["articles_all_wrong"] == 1                            # 키워드가 모두 틀린 기사 수
+
+
+@pytest.mark.parametrize("correct, core", [("3", "1"), ("-1", "0"), ("1", "2"), ("x", "1")])
+def test_keyword_score_rejects_invalid_judgments(correct, core):
+    kw = pd.DataFrame({"row": [1], "kw_total": [2], "kw_correct": [correct], "kw_core": [core]})
+    with pytest.raises(ValueError):
+        vs.keyword_score(kw)                                       # 맞은 수 > 전체, 음수, kw_core가 0/1이 아님
+
+
+def test_keyword_sample_main_uses_sentiment_sample_order_and_refuses_overwrite(db_path, tmp_path):
+    review = tmp_path / "review.csv"
+    s = vs.sample_main(n=4, path=review, db_path=db_path)
+    out = tmp_path / "kw.csv"
+    kw = vs.keyword_sample_main(review_path=review, db_path=db_path, version=vs.SAMPLE_VERSION, path=out, rows=3)
+    assert kw["news_id"].tolist() == s["news_id"].tolist()[:3] and out.exists()
+    with pytest.raises(SystemExit):
+        vs.keyword_sample_main(review_path=review, db_path=db_path, version=vs.SAMPLE_VERSION, path=out, rows=3)
