@@ -362,7 +362,7 @@ def s08_recommend(prs):
 
 
 def s09_sentiment(prs):
-    s = new_slide(prs, "AI 활용 ① 기업별 감성 분류", "LLM 오류를 유형으로 나눠 프롬프트를 고쳤다")
+    s = new_slide(prs, "AI 활용 ① 기업별 감성 분류 · 이슈 키워드 추출", "LLM 오류를 유형으로 나눠 프롬프트를 고쳤다")
     cd = CategoryChartData()
     cd.categories = ["v1 1차", "v1 (사람 라벨 정정 후)", "v2 (본문 6,000자 + 규칙 7)"]
     cd.add_series("SK하이닉스", [0.64, 0.70, 0.78])
@@ -395,11 +395,18 @@ def s09_sentiment(prs):
             ("같은 표본으로 튜닝", "규칙을 만든 50건으로 채점", "낙관적일 수 있음을 화면·리포트에 표시")]
     x = M + 7.0
     for i, (k, prob, fix) in enumerate(rows):
-        y = 1.7 + i * 1.65
-        box(s, x, y, W - M - x, 1.45, fill=CARD)
-        text(s, x + 0.3, y + 0.15, 4.5, 0.35, k, size=15, color=GREEN, bold=True)
-        text(s, x + 0.3, y + 0.55, 4.6, 0.35, prob, size=13, color=TEXT2)
-        text(s, x + 0.3, y + 0.92, 4.6, 0.4, [[("→ ", {"color": GREEN}), (fix, {})]], size=13, bold=True)
+        y = 1.7 + i * 1.27
+        box(s, x, y, W - M - x, 1.12, fill=CARD)
+        text(s, x + 0.3, y + 0.1, 4.5, 0.32, k, size=14, color=GREEN, bold=True)
+        text(s, x + 0.3, y + 0.43, 4.6, 0.3, prob, size=12, color=TEXT2)
+        text(s, x + 0.3, y + 0.74, 4.6, 0.32, [[("→ ", {"color": GREEN}), (fix, {})]], size=12, bold=True)
+    # 이슈 키워드 추출 검수 (리포트 4.5.1)
+    y = 1.7 + 3 * 1.27
+    box(s, x, y, W - M - x, 1.14, fill=SURFACE, line=GREEN)
+    text(s, x + 0.3, y + 0.1, 4.6, 0.3, "이슈 키워드 추출 검수 (같은 표본 50건)", size=12, color=GREEN, bold=True)
+    text(s, x + 0.3, y + 0.42, 4.6, 0.4, [[("정밀도 0.99", {"bold": True}), (" (156/157)   ", {"color": TEXT2, "size": 12}),
+                                          ("중심 이슈 0.98", {"bold": True}), (" (49/50)", {"color": TEXT2, "size": 12})]], size=15)
+    text(s, x + 0.3, y + 0.8, 4.6, 0.28, "블라인드 아님 · AI 후보를 사람이 승인 → 후한 추정", size=11, color=TEXT3)
 
 
 def s10_rag(prs):
