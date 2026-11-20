@@ -31,7 +31,7 @@ qa_view.apply_theme()  # 공통 테마 + 카드·지표 모양(.qa-*)
 st.markdown(sm.SUMMARY_CSS, unsafe_allow_html=True)
 
 if not config.DB_PATH.exists():
-    st.error("DB가 없습니다. README 실행 순서(1~9)대로 분석 결과를 만든 뒤 다시 여세요.")
+    st.error("DB가 없습니다. README 실행 순서(6단계)대로 분석 결과를 만든 뒤 다시 여세요.")
     st.stop()
 DB_KEY = config.DB_PATH.stat().st_mtime  # DB가 바뀌면 캐시를 새로 만든다
 

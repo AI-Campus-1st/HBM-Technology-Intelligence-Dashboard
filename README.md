@@ -73,35 +73,46 @@ copy .env.example .env
 
 ## 실행 순서 (파이프라인)
 
-모든 명령은 프로젝트 루트에서 실행합니다. 수집·분석 결과는 `data/`에 저장되고, 대시보드는 **저장된 결과만 조회**합니다.
+모든 명령은 프로젝트 루트에서 실행합니다. 대시보드는 **저장된 결과만 조회**합니다.
 
-| 순서 | 명령 | 담당 | 결과 |
-|---|---|---|---|
-| 1 | `python -m src.common.db` | 공동 | DB·테이블 생성 |
-| 2 | `python -m src.news.load_news` | 김한승 | 뉴스 DB 적재 |
-| 3 | `python -m src.dart.corp_code` | 한도윤 | SK하이닉스·삼성전자 corp_code |
-| 4 | `python -m src.dart.collect_list` | 한도윤 | 공시 목록 (원본 저장) |
-| 5 | `python -m src.dart.collect_documents` | 한도윤 | 공시 원문 파일 |
-| 5-1 | `python -m src.dart.collect_attachments` | 한도윤 | 실적 공시 첨부 경영설명회 PDF(국문 27건) 수집·텍스트 추출 (4 다음. DART 웹 화면에서 받음. 공유받은 `data/raw/dart/attachments`가 있으면 `--extract`로 추출만, 네트워크 불필요) |
-| 6 | `python -m src.dart.parse_documents` | 한도윤 | 공시 텍스트 DB 적재 + 정기보고서 R&D·투자 섹션 추출 (`--sections`면 섹션만 다시: `data/processed/disclosure_sections.csv`, `outputs/reports/disclosure_section_summary.csv`·`disclosure_rnd_capex.csv`) |
-| 6-1 | `python -m src.dart.news_link` | 한도윤 | HBM 기사↔공시 연결 후보, 새 RAG 기준 미리보기 (`--apply`는 김한승과 기준 합의 후. 5-1 다음이면 첨부에 HBM이 있는 실적 공시도 RAG 대상) |
-| 6-2 | `python -m src.rag.chunking` | 한도윤 | RAG 대상 공시 청크 (6-1 `--apply` 다음. 첨부는 쪽마다 청크. `data/processed/disclosure_chunks.jsonl`, 요약 `outputs/reports/disclosure_chunk_summary.csv`) |
-| 7 | `python -m src.news.preprocess` | 김한승 | 제목 중복(재배포) 표시, `news_tag` 적재 (2 다음. 7을 처음 돌리거나 다시 돌렸으면 6-1 `news_link --apply` → 6-2 `chunking`을 다시 실행해 실제 태그·중복 제외를 반영) |
-| 7-1 | `python -m src.eda.disclosure_trend` | 한도윤 | 공시 건수 추이 (6 다음이면 언제든. `outputs/reports/disclosure_*.csv`, `outputs/figures/disclosure_monthly.html`) |
-| 7-2 | `python -m src.dart.sql_report` | 한도윤 | 공시 SQL 집계 `sql/05_*.sql` 실행 (7·6-1 `--apply` 다음. `outputs/reports/sql05_*.csv`) |
-| 8 | `python -m src.eda.spike_detection` | 공동 | 이슈 급증 시점 (방식 B `rolling6m_2sigma_exclude_spikes_min10_v1` → `issues`, 미리보기 `--dry-run`, 비교 `--method-a`) |
-| 8-1 | `python -m src.dart.issue_evidence` | 공동 | 급증 구간별 근거 공시 후보 → `issue_evidence` (8·6-1 다음. 사람 확인은 `data/labels/issue_evidence_review_v1.csv`의 `verified`를 채우고 다시 실행. 급증 기준을 바꿀 때는 `--clear` → 8 → 8-1) |
-| 8-1a | `python -m src.dart.issue_summary` | 한도윤 | 사건 요약 라벨 `data/labels/issue_summary_v1.csv` 점검(구간·상태·근거 접수번호가 `verified=1`인지). `--apply`는 `status=확정` 행만 `issues.summary`에 쓴다 (8·8-1 다음. 8을 다시 돌리면 summary가 비므로 다시 실행) |
-| 8-2 | `python -m src.eda.news_sql_report` | 김한승 | 뉴스 SQL 집계 `sql/01~04_*.sql` 실행 (8·9 다음 — 03·04가 `issues`, 04가 `news_analysis`를 읽음. `outputs/reports/sql01~04_*.csv`) |
-| 9 | `python -m src.llm.classify` | 김한승 | HBM 기사 385건 기업별 감성(SK하이닉스·삼성전자)·이슈 키워드 → `news_analysis` (프롬프트 `sent_v2`, 7 다음. `--dry-run`은 대상·입력 글자 수만, `--limit N`은 앞 N건만, 다시 실행하면 남은 기사만 처리). **공유:** 분류한 사람이 `--export` → `outputs/reports/news_analysis_<버전>.csv` 커밋, 다른 사람은 `--import`로 DB에 넣는다 (API 호출 없음, 다시 분류하지 않는다) |
-| 9-1 | `python -m src.llm.validate_sample sample` → `score` | 김한승 | 감성 분류 층화 표본 100건 검수 파일 `data/labels/sentiment_review_sent_v1.csv`(LLM 판정 숨김) → 사람·교차 라벨을 채운 뒤 `score`로 기업별 정확도·Macro-F1·κ·혼동행렬 (`outputs/reports/sentiment_eval_sent_v1*.csv`) |
-| 10 | `python -m src.rag.build_index` | 한도윤 | 벡터 DB `data/vectordb/` (6-2 다음. OpenAI 임베딩 호출, `--dry-run`은 토큰 수만, `--query "질문"`은 검색만. 김한승은 실행하지 않고 공유 드라이브의 vectordb zip을 풀어 쓴다) |
-| 10-1 | `python -m src.rag.qa_chain "질문"` | 한도윤 | 공시 근거 질의응답 (10 다음. `--samples`는 예시 질문 9개 → `outputs/reports/qa_samples.csv`, 대시보드용 저장 답변 `qa_samples.json`. LLM은 `config.LLM_MODEL`. `--rerank`는 재정렬 모델 사용, 아래 10-3) |
-| 10-2 | `python -m src.rag.evaluate` | 한도윤 | 공시 Q&A 평가 (10-1 다음. 평가 질문 `data/labels/qa_eval_v1.csv` 24문항 → `outputs/reports/qa_eval_v1.csv`·`qa_eval_v1_summary.csv`. 질문마다 LLM 1회) |
-| 10-3 | (선택) `pip install -r requirements/rerank.txt` 후 `python -m src.rag.evaluate --rerank`, `python -m src.rag.qa_chain --samples --rerank` | 한도윤 | 교차 인코더 재정렬(`BAAI/bge-reranker-v2-m3`, 약 2.3GB). 결과는 `qa_eval_v1_rerank*.csv`, `--version v2`는 확인용 평가 질문 `qa_eval_v2.csv`. CPU에서 질문당 약 40초(평가 v1 약 22분, 예시 약 9분). 리포트 5.4 |
-| 11 | `streamlit run dashboard/app.py` | 공동 | 대시보드 실행 |
+### 대시보드 띄우기 (6단계)
 
-> 2·7·9(김한승)와 3~6·10(한도윤)은 서로 독립이라 병행할 수 있습니다.
+아래 자료가 있으면 API 키 없이, LLM을 다시 부르지 않고 같은 결과가 나옵니다 (2026-11-20 깨끗한 복제본에서 재현 확인: 약 1분, `db --check` 지문 동일).
+- 제공 뉴스 CSV: `data/raw/news/04_반도체_묶음_반도체_7177건_2023-10-19~2026-10-19.csv` (`config.NEWS_CSV`)
+- DART 원본 zip(공유 드라이브): 프로젝트 루트에 풀면 `data/raw/dart/`
+- 벡터 DB zip(공유 드라이브): 프로젝트 루트에 풀면 `data/vectordb/`
+- LLM 결과 CSV: `outputs/reports/news_analysis_sent_v1.csv`·`sent_v2.csv` (저장소에 있음, 5단계 `--import`가 읽음)
+- zip을 풀면 루트에 안내 파일(`README_*.md`)이 생깁니다. 커밋하지 않습니다.
+
+| 단계 | 명령 (순서대로) | 결과 |
+|---|---|---|
+| 1. DB | `python -m src.common.db` | 빈 DB·테이블 |
+| 2. 뉴스 | `python -m src.news.load_news` → `python -m src.news.preprocess` | 뉴스 7,177건 적재, 중복 표시·HBM/기업 태그 |
+| 3. 공시 | `python -m src.dart.corp_code` → `python -m src.dart.collect_list` → `python -m src.dart.collect_documents` → `python -m src.dart.collect_attachments --extract` → `python -m src.dart.parse_documents` | 공시 568건·원문·실적 첨부 PDF 텍스트 (원본이 있으면 API 0회) |
+| 4. 연결·청크 | `python -m src.dart.news_link --apply` → `python -m src.rag.chunking` | 기사↔공시 연결, RAG 대상 101건, 청크 2,191개 |
+| 5. 분석 결과 | `python -m src.eda.spike_detection` → `python -m src.dart.issue_evidence` → `python -m src.dart.issue_summary --apply` → `python -m src.llm.classify --import` | 급증 구간·근거 공시·사건 요약, 기업별 감성 (분류 다시 안 함) |
+| 6. 대시보드 | `streamlit run dashboard/app.py` | 요약 → 이슈 분석 → 공시 Q&A |
+
+- 확인: `python -m src.common.db --check`의 지문이 팀원과 같으면 같은 DB입니다 (아래 '각자 로컬 DB 맞추기'). 기준값: news `f7e3236fe557`, news_tag `01f6c26a483a`, news_analysis `bf08ba263b44`, issues `bdb6940a7323`, disclosure `e314c51fcf4e`, issue_evidence `0eb96da40999`, FK 위반 0건.
+- 실행하면 `outputs/reports/`의 일부 CSV가 다시 저장됩니다. 줄바꿈만 바뀌거나 `disclosure_rag_link_summary.csv`의 '현재_RAG대상' 열(실행 직전 DB 상태)만 달라지는 것은 정상입니다.
+- 공시 Q&A에서 **직접 입력한 질문**만 `OPENAI_API_KEY`가 필요합니다. 예시 질문 9개는 저장된 답변이라 키 없이 보입니다.
+
+### 다시 만들거나 검수할 때 (선택)
+
+| 목적 | 명령 | 비고 |
+|---|---|---|
+| 공시 원본 새로 받기 | `collect_list`·`collect_documents`·`collect_attachments`를 옵션 없이 실행 | `DART_API_KEY` 필요. 받은 원본이 있으면 건너뜀 |
+| 집계 CSV 다시 만들기 | `python -m src.eda.disclosure_trend`, `python -m src.dart.sql_report`, `python -m src.eda.news_sql_report` | 결과 `outputs/reports/` (저장소에 있음). 5단계 다음 |
+| 감성·키워드 다시 분류 | `python -m src.llm.classify` → `--export` | OpenAI 호출(385건, 약 20분). 다른 사람은 `--import`만 |
+| 감성 표본 검수 | `python -m src.llm.validate_sample sample` → 라벨 → `score` | 리포트 4.5 |
+| 이슈 키워드 검수 | `python -m src.llm.validate_sample kw-sample` → 판정 → `kw-score` | `data/labels/keyword_review_sent_v2.csv` → `outputs/reports/keyword_eval_sent_v2.csv`, 리포트 4.5.1 |
+| 벡터 DB 새로 만들기 | `python -m src.rag.build_index` | OpenAI 임베딩 호출. `--dry-run`은 토큰 수만 |
+| Q&A 예시·평가 | `python -m src.rag.qa_chain --samples`, `python -m src.rag.evaluate` | 예시 9개 저장 답변, 평가 24문항. 리포트 5.3·5.4 |
+| 재정렬(정밀 검색) | `pip install -r requirements/rerank.txt` 후 `--rerank` | 약 2.3GB, CPU 질문당 약 40초. 리포트 5.4 |
+| 급증 기준을 바꿀 때 | `python -m src.dart.issue_evidence --clear` → 5단계 다시 | 사람 확인 라벨은 `data/labels/`에서 다시 반영 |
+| 리포트 통합본 | `python -m src.common.build_report` | 장 파일을 고친 뒤 꼭 실행 (안 하면 테스트 실패) |
+| 발표 PPT | `python docs/presentation/make_deck.py` | `pip install python-pptx` |
+| 테스트 | `python -m pytest -q` | API 호출 없음 |
 
 **각자 로컬 DB 맞추기:** DB 파일은 주고받지 않고, 같은 코드 + 같은 입력(DART 원본 zip, LLM 결과 파일)으로 각자 다시 만듭니다. 자세한 규칙은 [`docs/conventions.md` §5](docs/conventions.md)를 봅니다.
 
