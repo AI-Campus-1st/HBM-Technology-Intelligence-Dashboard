@@ -85,3 +85,14 @@ def test_highlight_quotes_appear_verbatim_on_cited_page():
         for page, text in h["excerpts"]:
             found = any(len(doc) >= page and _norm(text) in _norm(doc[page - 1]) for doc in docs)
             assert found, f"{h['rcept_no']} p.{page}: {text}"
+
+
+def test_compute_facts_sentiment_counts_and_latest_complete_quarter(tables):
+    """분기 기사 수를 함께 돌려주고, 일부만 수집한 달이 낀 분기는 '최근'에서 뺀다 (리포트 6.5.1)."""
+    monthly, issues, coverage, sentiment, ev = tables
+    f = cc.compute_facts(monthly, issues, coverage, sentiment, ev)
+    assert f["sec_articles"]["2024Q1"] == 12                         # 삼성 1~3월 각 4건
+    assert f["sec_latest"][0] == "2024Q4"
+    s = sentiment.copy()
+    s.loc[s["month"] == "2024-12", "partial"] = 1                    # 마지막 달이 일부 수집이면
+    assert cc.compute_facts(monthly, issues, coverage, s, ev)["sec_latest"][0] == "2024Q3"
