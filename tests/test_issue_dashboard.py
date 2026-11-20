@@ -234,3 +234,9 @@ def test_range_overview_matches_full_overview(paths):
     assert il.range_overview(m, t, ev) == il.overview(paths["db"], paths["summary"])  # 전체 기간이면 같다
     part = il.range_overview(il.in_months(m, "2024-06", "2024-06"), il.issues_in_range(t, "2024-06", "2024-06"), ev)
     assert part["hbm_articles"] == 1 and part["issues"] == 1 and part["verified_evidence"] == 0
+
+
+def test_disclosure_links(paths):
+    d = il.disclosure_links(paths["db"], ["r2", "nope"])
+    assert d.to_dict("records") == [{"rcept_no": "r2", "url": "https://dart/r2"}]
+    assert il.disclosure_links(paths["db"], []).empty
