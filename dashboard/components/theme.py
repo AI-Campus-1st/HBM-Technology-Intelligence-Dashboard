@@ -23,7 +23,6 @@ COLORS = {
     "text": "#ffffff", "text_2": "#b3b3b3", "text_3": "#cbcbcb", "line": "#4d4d4d",
     "green": "#1ed760", "red": "#f3727f", "orange": "#ffa42b", "blue": "#539df5",
 }
-GREEN = COLORS["green"]
 
 THEME_CSS = """
 <style>

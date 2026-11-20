@@ -7,7 +7,7 @@
   첫 달(2023-10, 19일부터)과 마지막 달(2026-10, 19일까지)은 일부 기간만 있어 partial=True로 표시한다.
 - 유형 합계만 보면 정기성 공시에 묻힌다. J 공정위공시는 분기마다 반복되고, I 거래소공시의 상당수는
   배당·IR·지분 변동이다. 그래서 공시명으로 성격(category)을 붙이고, 사건성 공시(EVENT_CATEGORIES)를 따로 센다.
-- 집계 함수는 기간·기업·유형 필터를 인자로 받는다. Day 6 대시보드(disclosure_loader)가 그대로 부른다.
+- 집계 함수는 기간을 인자로 받는다. 대시보드의 기간·기업·유형 필터는 disclosure_loader.filter_disclosures가 맡는다.
 
 실행: python -m src.eda.disclosure_trend   (parse_documents 다음. DB만 읽고 쓰지 않는다)
 
@@ -23,7 +23,6 @@
 """
 
 import re
-from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 
@@ -101,26 +100,6 @@ def load_disclosures(db_path: Path = config.DB_PATH) -> pd.DataFrame:
     return prepare(df)
 
 
-def filter_disclosures(
-    df: pd.DataFrame,
-    start: date | str | None = None,
-    end: date | str | None = None,
-    companies: Iterable[str] | None = None,
-    types: Iterable[str] | None = None,
-) -> pd.DataFrame:
-    """기간(양 끝 포함)·기업·유형 필터. None이면 그 조건은 걸지 않는다. 대시보드 공통 필터와 같은 인자."""
-    mask = pd.Series(True, index=df.index)
-    if start is not None:
-        mask &= df["date"] >= pd.Timestamp(start)
-    if end is not None:
-        mask &= df["date"] <= pd.Timestamp(end)
-    if companies is not None:
-        mask &= df["corp_name"].isin(list(companies))
-    if types is not None:
-        mask &= df["pblntf_ty"].isin(list(types))
-    return df[mask]
-
-
 def period_range(start: date | str, end: date | str, freq: str = "M") -> list[str]:
     """start~end를 덮는 기간 목록 ('2023-10' 또는 '2023Q4'). 건수가 0인 달도 축에 남기려고 쓴다."""
     return [str(p) for p in pd.period_range(pd.Timestamp(start), pd.Timestamp(end), freq=freq)]
@@ -158,12 +137,6 @@ def period_counts(
     out["count"] = out["count"].astype(int)
     out["partial"] = out["period"].map(lambda p: is_partial(p, start, end, freq))
     return out
-
-
-def monthly_counts(df: pd.DataFrame, **filters) -> pd.DataFrame:
-    """필터 적용 후 기업 × 월 × 유형 건수 (대시보드용 진입점)."""
-    period = {k: filters[k] for k in ("start", "end") if filters.get(k) is not None}
-    return period_counts(filter_disclosures(df, **filters), "M", "pblntf_ty", **period)
 
 
 def type_distribution(df: pd.DataFrame) -> pd.DataFrame:

@@ -152,7 +152,7 @@
 
 ### 다음 단계
 - ~~김한승의 월별 HBM 기사 비중·급증 구간(`issues`)이 나오면 같은 월 축에 사건성 공시를 겹쳐 본다~~ → 완료: 3.4(SQL 05_1 월별 표), 3.5(급증 구간별 근거 공시)
-- 대시보드(Day 6)는 `filter_disclosures`·`monthly_counts`를 공통 필터 값(기간·기업·유형)으로 호출한다.
+- ~~대시보드(Day 6)는 `filter_disclosures`·`monthly_counts`를 공통 필터 값(기간·기업·유형)으로 호출한다.~~ → 대시보드는 `dashboard/data_access/disclosure_loader.filter_disclosures`로 직접 거른다. 쓰지 않던 `disclosure_trend.filter_disclosures`·`monthly_counts`는 삭제했다.
 
 ## 3.3 정기보고서 R&D·투자 섹션 (한도윤)
 

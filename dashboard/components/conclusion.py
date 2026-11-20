@@ -19,7 +19,6 @@
 
 import pandas as pd
 
-from dashboard.components.qa_view import esc
 from src.common import config
 
 REVIEW_PATH = config.LABELS_DIR / "issue_evidence_review_v1.csv"
@@ -89,40 +88,3 @@ def compute_facts(monthly: pd.DataFrame, issues: pd.DataFrame, coverage: pd.Data
         "accuracy": {c: float(e["accuracy"]) for c, e in evaluation.items()},
         "eval_n": int(next(iter(evaluation.values()))["n"]) if evaluation else 0,
     }
-
-
-def _pct(v: float) -> str:
-    return f"{v:.0%}"
-
-
-def conclusion_html(f: dict, evidence_links: pd.DataFrame) -> str:
-    """결론 카드 HTML. evidence_links: rcept_no·url (EVIDENCE_HIGHLIGHTS의 DART 링크)."""
-    links = dict(zip(evidence_links["rcept_no"], evidence_links["url"])) if len(evidence_links) else {}
-    neg = f["neg_share"]
-    turn = ""
-    if f["sec_trough"] and f["sec_rebound"]:
-        (tq, tv), (rq, rv) = f["sec_trough"], f["sec_rebound"]
-        turn = f" 다만 삼성전자 논조는 {tq}(순감성 {tv:+.2f}) 바닥 이후 {rq}({rv:+.2f})까지 긍정으로 돌아섰다."
-    again = f"{f['later_spikes']}차례 다시 급증했고, " if f["later_spikes"] else ""
-    s1 = (f"HBM 보도 비중은 <b>{esc(f['peak_month'])}에 {f['peak_share']:.1%}</b>로 정점을 찍은 뒤 {again}"
-          f"최근 3개월({esc(f['recent_months'])}) 평균은 {f['recent_share']:.1%}로 낮아졌다.")
-    s2 = (f"공시로 확인된 급증 {f['confirmed']}구간({esc(CONFIRMED_EVENTS)})에서 HBM 기사의 삼성전자 점유는 "
-          f"<b>{_pct(f['sec_share_min'])[:-1]}–{_pct(f['sec_share_max'])}</b>로 평소({_pct(f['outside_sec'])})보다 높았고, "
-          f"부정 보도 비율도 삼성전자 {_pct(neg.get('삼성전자', float('nan')))}가 SK하이닉스 "
-          f"{_pct(neg.get('SK하이닉스', float('nan')))}보다 높았다.{turn}")
-    quotes = []
-    for h in EVIDENCE_HIGHLIGHTS:
-        label = f"{h['corp']} {h['doc']}({h['date']})"
-        url = links.get(h["rcept_no"])
-        label = f'<a href="{esc(url)}" target="_blank" rel="noopener">{esc(label)} ↗</a>' if url else f"{esc(label)} (공시 링크 없음)"
-        quotes.append(f"{label}의 ‘{esc(h['quote'])}’")
-    s3 = ("공시에서는 " + ", ".join(quotes) + "가 확인된다. SK하이닉스의 HBM 실적 호조는 공시에는 있으나 "
-          "수집한 뉴스에서는 실적 보도가 거의 없어, 보도량만으로는 SK하이닉스의 성과가 덜 드러난다.")
-    acc = " · ".join(f"{c} {a:.2f}" for c, a in f["accuracy"].items())
-    s4 = (f"단, <b>HBM 투자액</b>은 공시로 확인할 수 없고(R&amp;D·시설투자는 회사 전체 금액), 감성은 LLM 판정(정확도 {acc}, "
-          f"표본 {f['eval_n']}건)이며, 보도 비중·점유는 시장 점유율이나 실적이 아니다.")
-    body = "".join(f"<p style='margin:0 0 10px'>{s}</p>" for s in (s1, s2, s3))
-    return (f'<div class="qa-answer" style="box-shadow: inset 3px 0 0 var(--green), var(--shadow)">'
-            f'<div class="q">한눈에 보는 결론 · 전체 기간 {esc(f["period"])} 기준 · 아래 필터와 무관</div>'
-            f'<div class="a" style="font-size:16px; white-space:normal">{body}'
-            f'<p style="margin:0; font-size:13px; color:var(--text-2)">{s4}</p></div></div>')

@@ -19,7 +19,6 @@ import streamlit as st
 
 from dashboard.components import theme
 
-GREEN = theme.GREEN
 EXCERPT_CHARS = 360
 
 QA_CSS = """

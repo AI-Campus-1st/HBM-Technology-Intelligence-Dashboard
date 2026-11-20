@@ -86,19 +86,6 @@ def test_partial_periods_follow_analysis_window():
     assert not t.is_partial("2026-09", date(2023, 10, 19), date(2026, 10, 30))
 
 
-def test_filter_disclosures(df):
-    assert len(t.filter_disclosures(df, companies=["삼성전자"])) == 2
-    assert len(t.filter_disclosures(df, types=["I"], start="2024-04-25", end="2024-04-30")) == 2
-    assert len(t.filter_disclosures(df)) == len(df)
-
-
-def test_monthly_counts_uses_filter_period(df):
-    out = t.monthly_counts(df, start="2024-04-01", end="2024-06-30", companies=["SK하이닉스"])
-    assert set(out["period"]) == {"2024-04", "2024-05", "2024-06"}
-    assert set(out["corp_name"]) == {"SK하이닉스"}
-    assert out["count"].sum() == 3
-
-
 def test_type_distribution_share(df):
     out = t.type_distribution(df).set_index(["corp_name", "pblntf_ty"])
     assert out.loc[("SK하이닉스", "I"), "count"] == 3

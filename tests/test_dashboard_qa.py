@@ -154,7 +154,7 @@ def test_common_theme_shared_by_pages_and_config():
     assert ".qa-hero" in qa_view.QA_CSS and ":root" not in qa_view.QA_CSS
     # 공용 config.toml도 같은 색이다
     cfg = (root / ".streamlit" / "config.toml").read_text(encoding="utf-8")
-    assert 'base = "dark"' in cfg and theme.COLORS["bg"] in cfg and theme.GREEN in cfg
+    assert 'base = "dark"' in cfg and theme.COLORS["bg"] in cfg and theme.COLORS["green"] in cfg
     # 모든 페이지가 공통 테마를 부른다
     pages = [root / "dashboard" / "app.py", *sorted((root / "dashboard" / "pages").glob("*.py"))]
     for page in pages:
