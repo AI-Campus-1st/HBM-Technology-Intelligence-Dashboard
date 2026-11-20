@@ -78,6 +78,11 @@ def compute_facts(monthly: pd.DataFrame, issues: pd.DataFrame, coverage: pd.Data
     trough_q = q_net.idxmin() if len(q_net) else None
     after = q_net[q_net.index > trough_q] if trough_q else q_net.iloc[0:0]
     rebound_q = after.idxmax() if len(after) else None
+    # 마지막 '완전한' 분기 (수집 시작·끝 달처럼 일부만 수집한 달이 낀 분기는 뺀다) — 반등 뒤 최근 흐름을 같이 보이려고
+    partial_q = set(sec.loc[sec["partial"] == 1, "q"]) if "partial" in sec else set()
+    complete = q_net[~q_net.index.isin(partial_q)]
+    latest_q = complete.index[-1] if len(complete) else None
+    n_of = q["articles"].astype(int).to_dict()                  # 분기 기사 수 (순감성의 분모, 화면에 함께 표시)
 
     return {
         "period": f"{config.ANALYSIS_START:%Y-%m-%d}–{config.ANALYSIS_END:%Y-%m-%d}",
@@ -93,6 +98,8 @@ def compute_facts(monthly: pd.DataFrame, issues: pd.DataFrame, coverage: pd.Data
         "neg_share": neg_share,
         "sec_trough": (trough_q, float(q_net[trough_q])) if trough_q else None,
         "sec_rebound": (rebound_q, float(q_net[rebound_q])) if rebound_q else None,
+        "sec_latest": (latest_q, float(q_net[latest_q])) if latest_q else None,
+        "sec_articles": n_of,
         "accuracy": {c: float(e["accuracy"]) for c, e in evaluation.items()},
         "eval_n": int(next(iter(evaluation.values()))["n"]) if evaluation else 0,
     }

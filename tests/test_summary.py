@@ -94,3 +94,15 @@ def test_cards_and_recommendation_use_hedged_earnings_sentence(facts, tables):  
         assert "SK하이닉스 5건, 삼성전자 33건" in html
         assert "과소평가" not in html and "거의 없다" not in html
     assert "‘’" not in sm.cards_html(facts, tables[0], links, EARNINGS)   # 원문 ’25와 따옴표가 겹치지 않음
+
+
+def test_sentiment_turn_shows_counts_and_latest_quarter():
+    f = {"sec_trough": ("2025Q2", -0.49), "sec_rebound": ("2025Q4", 0.93), "sec_latest": ("2026Q3", 0.17),
+         "sec_articles": {"2025Q2": 51, "2025Q4": 27, "2026Q3": 18}}
+    s = sm.sentiment_turn_html(f)
+    assert "2025Q2 -0.49</b>(기사 51건)" in s and "2025Q4 +0.93</b>(기사 27건)" in s
+    assert "최근 <b>2026Q3 +0.17</b>(기사 18건)로 다시 낮아졌다" in s   # 좋은 값만 고르지 않음
+    assert "흐름만 참고" in s
+    # 최근 분기가 반등 분기와 같으면 '최근'을 따로 쓰지 않는다
+    assert "최근" not in sm.sentiment_turn_html({**f, "sec_latest": ("2025Q4", 0.93)})
+    assert sm.sentiment_turn_html({**f, "sec_trough": None}) == ""

@@ -81,6 +81,29 @@ def earnings_sentence(earnings: pd.DataFrame | None) -> str:
             "어렵다(언론 전체 보도량을 뜻하지는 않는다).")
 
 
+def sentiment_turn_html(f: dict) -> str:
+    """삼성전자 분기 순감성의 바닥 → 반등 → 최근 (리포트 6.5.1). 분기마다 기사 수(순감성의 분모)를 붙인다.
+    반등은 '바닥 뒤 최고 분기'라 그것만 보이면 좋은 값만 고른 것처럼 읽히므로, 마지막 완전한 분기를 함께 보인다."""
+    if not (f.get("sec_trough") and f.get("sec_rebound")):
+        return ""
+    n = f.get("sec_articles", {})
+
+    def q(label: str, value: float) -> str:
+        cnt = f"(기사 {n[label]}건)" if label in n else ""
+        return f"<b>{esc(label)} {value:+.2f}</b>{cnt}"
+
+    (tq, tv), (rq, rv) = f["sec_trough"], f["sec_rebound"]
+    text = f" 삼성전자 논조(분기 순감성)는 {q(tq, tv)} 바닥 뒤 {q(rq, rv)}까지 올랐"
+    latest = f.get("sec_latest")
+    if latest and latest[0] > rq:
+        lq, lv = latest
+        trend = "다시 낮아졌다" if lv < rv else "그 수준을 유지했다"
+        text += f"고, 최근 {q(lq, lv)}로 {trend}."
+    else:
+        text += "다."
+    return text + " 분기 기사 수가 적어 순감성은 흐름만 참고한다."
+
+
 def _go(page: str, label: str) -> str:
     return f'<a href="{page}" target="_self">{esc(label)} →</a>'
 
@@ -128,10 +151,7 @@ def cards_html(f: dict, monthly: pd.DataFrame, evidence_links: pd.DataFrame,
           f'<div class="sm-go">{_go(ISSUE_PAGE, "보도 비중·급증 구간 보기")}</div></div>')
 
     neg = f["neg_share"]
-    turn = ""
-    if f["sec_trough"] and f["sec_rebound"]:
-        (tq, tv), (rq, rv) = f["sec_trough"], f["sec_rebound"]
-        turn = f" 삼성전자 논조는 <b>{esc(tq)}({tv:+.2f})</b> 바닥 뒤 <b>{esc(rq)}({rv:+.2f})</b>로 반등했다."
+    turn = sentiment_turn_html(f)
     c2 = ('<div class="sm-card"><div class="sm-k">② 누구 이야기인가</div>'
           f'<div class="sm-big">{_pct(f["sec_share_min"])[:-1]}–{_pct(f["sec_share_max"])} '
           '<small>급증 구간의 삼성전자 보도 점유</small></div>'
