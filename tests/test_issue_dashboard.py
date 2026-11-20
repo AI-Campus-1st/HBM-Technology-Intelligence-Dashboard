@@ -125,6 +125,30 @@ def test_overview(paths):
     assert o == {"articles": 4, "hbm_articles": 3, "issues": 2, "confirmed": 1, "excluded": 1, "verified_evidence": 1}
 
 
+def test_earnings_news_counts_window_and_filters(paths):
+    """실적 공시 전후(D-1~D+3) 제목에 실적 단어가 있는 HBM 기사만, 그 기업 태그(핵심·관련)로 센다."""
+    conn = db.connect(paths["db"])
+    db.write_table(conn, "news", pd.DataFrame([
+        {"news_id": i, "published_at": d, "title": t, "content": "본문", "media": "매체", "url": f"https://x/{i}",
+         "is_duplicate": dup, "dup_group_id": None}
+        for i, d, t, dup in (("f", "2024-03-06", "삼성전자 1분기 영업이익 6조", 0),
+                             ("g", "2024-03-06", "삼성전자 1분기 영업이익 6조", 1),     # 중복 → 제외
+                             ("h", "2024-03-20", "삼성전자 실적 후속", 0),             # 창 밖 → 제외
+                             ("k", "2024-03-05", "삼성전자 HBM 신제품", 0))]), mode="append")   # 실적 단어 없음 → 제외
+    db.write_table(conn, "news_tag", pd.DataFrame([
+        {"news_id": i, "tag_type": tt, "tag": tag, "relevance": "핵심", "in_title": 1, "body_count": 1, "rule_version": "test"}
+        for i in ("f", "g", "h", "k") for tt, tag in (("tech", "HBM"), ("company", "삼성전자"))]), mode="append")
+    db.write_table(conn, "disclosure", pd.DataFrame([
+        {"rcept_no": "r3", "corp_code": "00126380", "corp_name": "삼성전자", "report_nm": "[기재정정]영업(잠정)실적",
+         "rcept_dt": "2024-03-04", "pblntf_ty": "I", "url": "https://dart/r3", "text_status": "확보", "rag_target": 0}]),
+        mode="append")
+    conn.close()
+    e = il.earnings_news_counts(paths["db"]).set_index("corp_name")
+    assert e.loc["삼성전자", "releases"] == 1          # 같은 날 [기재정정]은 한 번으로 센다
+    assert e.loc["삼성전자", "articles"] == 1          # f만 (g 중복, h 창 밖, k 제목에 실적 단어 없음)
+    assert "SK하이닉스" not in e.index or e.loc["SK하이닉스", "releases"] == 0   # 시설투자 공시는 실적 공시가 아님
+
+
 # ── 차트 ──
 def test_share_figure_single_axis_and_issue_bands(paths):
     m = il.monthly_share(paths["db"], paths["spikes"])

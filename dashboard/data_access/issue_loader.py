@@ -212,6 +212,42 @@ def disclosure_links(db_path: Path, rcept_nos: list[str]) -> pd.DataFrame:
     return _read(db_path, f"SELECT rcept_no, url FROM disclosure WHERE rcept_no IN ({marks})", tuple(rcept_nos))
 
 
+EARNINGS_TITLE_WORDS = ("실적", "매출", "영업이익", "영업익")
+
+
+def earnings_news_counts(db_path: Path = config.DB_PATH, before: int = 1, after: int = 3) -> pd.DataFrame:
+    """기업별 '분기 실적 공시 전후 실적 기사' 수 (결론의 뉴스·공시 비교 문장용).
+
+    실적 공시 = 영업(잠정)실적 공시. 같은 날 원본과 [기재정정]이 있으면 한 번으로 센다(기업·접수일 기준).
+    기사 = 중복 제외 + HBM 관련도 핵심·관련 + 그 기업 태그 핵심·관련 + 제목에 EARNINGS_TITLE_WORDS 중 하나,
+    게재일이 그 기업 실적 공시일 D-before ~ D+after 안. 한 기사가 두 기업의 창에 걸치면 각 기업 태그 기준으로 따로 센다.
+    분석 기간(config.ANALYSIS_START~END) 안의 공시만 본다.
+
+    Returns: corp_name, releases(실적 공시 횟수), articles(창 안 실적 기사 수). 실적 공시가 없는 기업은 행이 없다.
+    수집한 뉴스(키워드 수집) 안에서의 숫자이며 언론 전체 보도량이 아니다.
+    """
+    title_cond = " OR ".join("n.title LIKE ?" for _ in EARNINGS_TITLE_WORDS)
+    sql = f"""
+        WITH releases AS (
+            SELECT DISTINCT corp_name, rcept_dt FROM disclosure
+            WHERE report_nm LIKE '%영업(잠정)실적%' AND rcept_dt BETWEEN ? AND ?
+        )
+        SELECT r.corp_name, COUNT(DISTINCT r.rcept_dt) AS releases,
+               COUNT(DISTINCT CASE WHEN n.news_id IS NOT NULL THEN r.rcept_dt || '|' || n.news_id END) AS articles
+        FROM releases AS r
+        LEFT JOIN news_tag AS c ON c.tag_type = 'company' AND c.tag = r.corp_name AND c.relevance IN ('핵심', '관련')
+        LEFT JOIN news AS n ON n.news_id = c.news_id AND n.is_duplicate = 0
+             AND date(n.published_at) BETWEEN date(r.rcept_dt, ?) AND date(r.rcept_dt, ?)
+             AND ({title_cond})
+             AND EXISTS (SELECT 1 FROM news_tag AS h WHERE h.news_id = n.news_id AND h.tag_type = 'tech'
+                         AND h.tag = 'HBM' AND h.relevance IN ('핵심', '관련'))
+        GROUP BY r.corp_name ORDER BY r.corp_name
+    """
+    params = (f"{config.ANALYSIS_START:%Y-%m-%d}", f"{config.ANALYSIS_END:%Y-%m-%d}",
+              f"-{before} days", f"+{after} days", *(f"%{w}%" for w in EARNINGS_TITLE_WORDS))
+    return _read(db_path, sql, params)
+
+
 def eval_summary(path: Path = EVAL_PATH) -> dict:
     """감성 검수 결과 {기업: {n, accuracy, ci_low, ci_high, macro_f1}}. 파일이 없으면 빈 dict."""
     if not path.exists():

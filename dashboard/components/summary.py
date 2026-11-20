@@ -68,6 +68,19 @@ def _pct(v: float) -> str:
     return "-" if v is None or (isinstance(v, float) and math.isnan(v)) else f"{v:.0%}"
 
 
+def earnings_sentence(earnings: pd.DataFrame | None) -> str:
+    """수집한 뉴스의 '실적 공시 전후 실적 기사' 수 비교 (issue_loader.earnings_news_counts, 리포트 6.5.1).
+    수집 데이터 안의 숫자로만 말하고, 언론 전체가 덜 보도했다는 주장은 하지 않는다."""
+    e = earnings.set_index("corp_name") if earnings is not None and len(earnings) else None
+    if e is None or not {"SK하이닉스", "삼성전자"} <= set(e.index):
+        return "수집한 뉴스의 보도량·점유만으로 SK하이닉스의 HBM 실적을 판단하기는 어렵다."
+    sk, sec = e.loc["SK하이닉스"], e.loc["삼성전자"]
+    releases = f"각 {int(sk['releases'])}회" if sk["releases"] == sec["releases"] else "각 회사"
+    return (f"수집한 뉴스에서 각 회사 분기 실적 공시({releases}) 전후 실적 기사는 SK하이닉스 {int(sk['articles'])}건, "
+            f"삼성전자 {int(sec['articles'])}건이다. 이 데이터의 보도량·점유만으로 SK하이닉스의 HBM 실적을 판단하기는 "
+            "어렵다(언론 전체 보도량을 뜻하지는 않는다).")
+
+
 def _go(page: str, label: str) -> str:
     return f'<a href="{page}" target="_self">{esc(label)} →</a>'
 
@@ -103,7 +116,8 @@ def hero_html(f: dict) -> str:
             f'<div class="sm-headline">{answer}</div></div>')
 
 
-def cards_html(f: dict, monthly: pd.DataFrame, evidence_links: pd.DataFrame) -> str:
+def cards_html(f: dict, monthly: pd.DataFrame, evidence_links: pd.DataFrame,
+               earnings: pd.DataFrame | None = None) -> str:
     """③ 근거 카드 3장: 무슨 일이 있었나 / 누구 이야기인가 / 공시로 확인된 사실."""
     events = "".join(f"<li>{esc(e.strip())}</li>" for e in cc.CONFIRMED_EVENTS.split(","))
     c1 = ('<div class="sm-card"><div class="sm-k">① 무슨 일이 있었나</div>'
@@ -132,21 +146,20 @@ def cards_html(f: dict, monthly: pd.DataFrame, evidence_links: pd.DataFrame) -> 
         url = links.get(h["rcept_no"])
         label = (f'<a href="{esc(url)}" target="_blank" rel="noopener">{esc(label)} ↗</a>' if url
                  else f"{esc(label)} (공시 링크 없음)")
-        quotes.append(f"<li>{label}<br>‘{esc(h['quote'])}’</li>")
+        quotes.append(f"<li>{label}<br>“{esc(h['quote'])}”</li>")  # 원문에 ’25 같은 작은따옴표가 있어 큰따옴표로 감싼다
     c3 = ('<div class="sm-card"><div class="sm-k">③ 공시로 확인된 사실</div>'
           f'<ul class="sm-list">{"".join(quotes)}</ul>'
-          '<div class="sm-text">SK하이닉스의 HBM 실적 호조는 공시에는 있지만 수집한 뉴스에는 실적 보도가 거의 없다. '
-          '보도량만 보면 SK하이닉스의 성과를 과소평가할 수 있다.</div>'
+          f'<div class="sm-text">{esc(earnings_sentence(earnings))}</div>'
           f'<div class="sm-go">{_go(QA_PAGE, "공시에 직접 물어보기")}</div></div>')
     return f'<div class="sm-cards">{c1}{c2}{c3}</div>'
 
 
-def recommend_html(f: dict) -> str:
+def recommend_html(f: dict, earnings: pd.DataFrame | None = None) -> str:
     """④ 그래서 무엇을 할까: 페르소나에게 권하는 다음 단계 (근거 카드 → 행동). 투자 의견이 아님을 밝힌다."""
     items = [
-        ("SK하이닉스 과소평가 주의",
-         "보도는 삼성전자 사건에 몰렸지만 HBM 매출 성장은 SK하이닉스 실적 자료에서 확인된다"
-         "(2024-10 전 분기 대비 +70% 이상, 2025년 2배 이상). 리포트의 비교 기준은 공시 수치로 잡는다."),
+        ("SK하이닉스는 보도량으로 판단하지 않기",
+         "SK하이닉스의 HBM 매출 성장은 실적 자료에서 확인된다(2024년 3분기 전 분기 대비 +70% 이상, 2025년 전년 대비 "
+         f"2배 이상). {earnings_sentence(earnings)} 리포트의 비교 기준은 공시 수치로 잡는다."),
         ("삼성전자 HBM4 반등은 정성 근거까지만",
          "실적 자료에 '엔비디아 베라 루빈향 HBM4 양산 판매 개시'(2026-04-30)와 'HBM4 공급 확대'(2026-07-30)는 있지만 "
          "출하량·매출 수치는 없다. 리포트에서는 정성 근거로만 쓰고, 수치는 컨퍼런스콜과 3분기 실적(수집 기간 이후)에서 "
