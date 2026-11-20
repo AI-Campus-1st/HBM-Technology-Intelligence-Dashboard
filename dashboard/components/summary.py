@@ -2,9 +2,10 @@
 요약(첫 화면) 조각: "이 산업에서 지금 무슨 일이 일어나고 있으며, 그 판단의 근거는 무엇인가"에 한 화면으로 답한다.
 
 화면 순서 (리포트 6.5):
-  ① 질문(제목) → ② 한 줄 답 → ③ 근거 카드 3장(무슨 일 / 누구 이야기 / 공시로 확인된 사실) → ④ 한계 한 줄
+  ① 질문(제목) → ② 한 줄 답 → ③ 근거 카드 3장(무슨 일 / 누구 이야기 / 공시로 확인된 사실)
+  → ④ 페르소나(애널리스트)에게 권하는 다음 단계 → 한계 한 줄
 숫자는 conclusion.compute_facts(저장된 분석 결과에서 계산)를 그대로 쓰고, 이 파일은 보여 주는 방식만 맡는다.
-사람의 판단은 JUDGMENT 한 문장과 conclusion.CONFIRMED_EVENTS·EVIDENCE_HIGHLIGHTS(사람이 확인한 공시)뿐이다.
+사람의 판단은 JUDGMENT·RECOMMEND_LEAD·recommend_html 항목과 conclusion.CONFIRMED_EVENTS·EVIDENCE_HIGHLIGHTS(사람이 확인한 공시)뿐이다.
 
 담당: 공동 (한도윤 작성, 문구는 김한승과 합의)
 일정: Day 7
@@ -23,6 +24,13 @@ JUDGMENT = "보도는 삼성전자 사건에 몰렸지만, HBM 실적 성장은 
 
 ISSUE_PAGE = "이슈_분석"   # app.py의 url_path와 같아야 한다 (테스트가 확인)
 QA_PAGE = "공시_QA"
+
+# 페르소나(증권사 반도체 담당 애널리스트, 투자 의견 없음 — 초안 v1.2 §1.2)에게 권하는 다음 단계.
+# 사람의 판단이라 상수로 둔다. 인용 수치는 확인된 공시(conclusion.EVIDENCE_HIGHLIGHTS), 보도 비중은 계산값.
+PERSONA = "반도체 담당 애널리스트"
+RECOMMEND_LEAD = "HBM 경쟁 구도는 보도량·논조가 아니라 실적 공시의 HBM 지표로 판단하고, 보도는 사건 시점을 확인하는 데만 쓴다."
+# 공시 Q&A에 넣어 볼 질문. 2026-11-20 확인: 2026-04-30·07-30 실적 첨부 p.7을 근거로 답함 (수치는 없다고 답함)
+HBM4_QUESTION = "삼성전자 2026년 HBM4 출하·판매 실적은?"
 
 SUMMARY_CSS = """
 <style>
@@ -43,6 +51,14 @@ SUMMARY_CSS = """
 .sm-go a { color: var(--green); text-decoration: none; font-weight: 700; }
 .sm-limit { font-size: 13px; color: var(--text-2); line-height: 1.6; padding: 12px 16px; border-radius: 8px;
             background: var(--surface); margin-bottom: 20px; }
+.sm-rec { background: var(--surface); border-radius: 8px; padding: 18px 22px; margin: 0 0 14px;
+          box-shadow: inset 3px 0 0 var(--green), var(--shadow); }
+.sm-rec-lead { font-size: 17px; font-weight: 700; color: var(--text); line-height: 1.5; margin-top: 8px; }
+.sm-rec-list { font-size: 14px; }
+.sm-rec-list li { margin-bottom: 4px; }
+.sm-rec-list b { color: var(--text); }
+.sm-rec-foot { font-size: 12px; color: var(--text-2); margin-top: 10px; }
+.sm-rec-foot a { color: var(--green); text-decoration: none; font-weight: 700; margin-left: 6px; }
 @media (max-width: 900px) { .sm-cards { grid-template-columns: 1fr; } .sm-headline { font-size: 18px; } }
 </style>
 """
@@ -123,6 +139,31 @@ def cards_html(f: dict, monthly: pd.DataFrame, evidence_links: pd.DataFrame) -> 
           '보도량만 보면 SK하이닉스의 성과를 과소평가할 수 있다.</div>'
           f'<div class="sm-go">{_go(QA_PAGE, "공시에 직접 물어보기")}</div></div>')
     return f'<div class="sm-cards">{c1}{c2}{c3}</div>'
+
+
+def recommend_html(f: dict) -> str:
+    """④ 그래서 무엇을 할까: 페르소나에게 권하는 다음 단계 (근거 카드 → 행동). 투자 의견이 아님을 밝힌다."""
+    items = [
+        ("SK하이닉스 과소평가 주의",
+         "보도는 삼성전자 사건에 몰렸지만 HBM 매출 성장은 SK하이닉스 실적 자료에서 확인된다"
+         "(2024-10 전 분기 대비 +70% 이상, 2025년 2배 이상). 리포트의 비교 기준은 공시 수치로 잡는다."),
+        ("삼성전자 HBM4 반등은 정성 근거까지만",
+         "실적 자료에 '엔비디아 베라 루빈향 HBM4 양산 판매 개시'(2026-04-30)와 'HBM4 공급 확대'(2026-07-30)는 있지만 "
+         "출하량·매출 수치는 없다. 리포트에서는 정성 근거로만 쓰고, 수치는 컨퍼런스콜과 3분기 실적(수집 기간 이후)에서 "
+         f"확인한다 — 공시 Q&A에 ‘{HBM4_QUESTION}’로 원문을 볼 수 있다."),
+        ("관심 둔화 ≠ 사업 둔화",
+         f"최근 3개월 보도 비중({f['recent_share']:.1%})이 낮아진 것은 보도 관심이 줄었다는 뜻이다. "
+         "사업이 나빠졌다는 신호로 읽지 않는다."),
+        ("공시로 못 메우는 부분",
+         "HBM 투자액은 공시로 확인할 수 없다(R&D·시설투자는 회사 전체 금액). 컨퍼런스콜·IR 질의로 보완한다."),
+    ]
+    lis = "".join(f"<li><b>{esc(k)}</b> — {esc(v)}</li>" for k, v in items)
+    return ('<div class="sm-rec">'
+            f'<div class="sm-k">④ 그래서 무엇을 할까 · {esc(PERSONA)}에게 권하는 다음 단계</div>'
+            f'<div class="sm-rec-lead">{esc(RECOMMEND_LEAD)}</div>'
+            f'<ol class="sm-list sm-rec-list">{lis}</ol>'
+            '<div class="sm-rec-foot">공개 자료(뉴스·DART 공시) 기반 분석이며 투자 의견이 아니다. '
+            f'{_go(QA_PAGE, "공시 Q&A에서 확인하기")}</div></div>')
 
 
 def limits_html(f: dict) -> str:
