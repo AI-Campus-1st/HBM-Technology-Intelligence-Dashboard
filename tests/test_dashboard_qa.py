@@ -39,6 +39,26 @@ def test_read_rag_disclosures_only_targets_newest_first(tmp_path):
     assert loader.read_rag_disclosures(tmp_path / "none.db").empty
 
 
+def test_month_options_cover_analysis_period():
+    months = loader.month_options()
+    assert months[0] == "2023-10" and months[-1] == "2026-10" and len(months) == 37
+
+
+def test_filter_disclosures_by_period_company_type():
+    df = pd.DataFrame({
+        "rcept_no": ["1", "2", "3", "4"],
+        "corp_name": ["SK하이닉스", "삼성전자", "삼성전자", "SK하이닉스"],
+        "rcept_dt": ["2023-10-26", "2024-10-31", "2024-11-01", "2026-10-06"],
+        "type_name": ["정기공시", "거래소공시", "정기공시", "거래소공시"],
+    })
+    ids = lambda d: list(d["rcept_no"])  # noqa: E731
+    assert ids(loader.filter_disclosures(df)) == ["1", "2", "3", "4"]  # 필터 없음 = 전부
+    assert ids(loader.filter_disclosures(df, "2023-10", "2026-10", "전체", [])) == ["1", "2", "3", "4"]
+    assert ids(loader.filter_disclosures(df, "2024-10", "2024-10")) == ["2"]  # 월 단위, 양 끝 포함
+    assert ids(loader.filter_disclosures(df, "2024-10", "2024-11", "삼성전자", ["정기공시"])) == ["3"]
+    assert loader.filter_disclosures(df, "2025-01", "2025-06").empty
+
+
 def test_readiness_names_missing_parts_without_values():
     assert loader.readiness({"n_chunks": 1}, api_key="sk-secret") == []
     problems = loader.readiness(None, api_key="")

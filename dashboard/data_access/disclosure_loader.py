@@ -59,6 +59,28 @@ def read_rag_disclosures(db_path: Path | None = None) -> pd.DataFrame:
     return df
 
 
+def month_options() -> list[str]:
+    """기간 필터 선택지: 분석 기간 전체 월 (YYYY-MM). 탭 1 기간 필터와 같은 범위다."""
+    months = pd.period_range(config.ANALYSIS_START, config.ANALYSIS_END, freq="M")
+    return [f"{m:%Y-%m}" for m in months]
+
+
+def filter_disclosures(df: pd.DataFrame, start: str | None = None, end: str | None = None,
+                       corp: str | None = None, types: list[str] | None = None) -> pd.DataFrame:
+    """공시 목록 필터: 제출 월 start~end(YYYY-MM, 양 끝 포함)·기업('전체'/None이면 전부)·공시 유형(비면 전부)."""
+    month = df["rcept_dt"].str[:7]
+    keep = pd.Series(True, index=df.index)
+    if start:
+        keep &= month >= start
+    if end:
+        keep &= month <= end
+    if corp and corp != "전체":
+        keep &= df["corp_name"] == corp
+    if types:
+        keep &= df["type_name"].isin(types)
+    return df[keep].reset_index(drop=True)
+
+
 def readiness(manifest: dict | None, api_key: str | None = None) -> list[str]:
     """Q&A를 쓸 수 없는 이유 목록. 비어 있으면 질문할 수 있다 (키 값은 보이지 않는다)."""
     api_key = config.OPENAI_API_KEY if api_key is None else api_key
