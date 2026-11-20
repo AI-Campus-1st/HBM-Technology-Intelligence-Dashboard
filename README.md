@@ -77,10 +77,12 @@ copy .env.example .env
 
 ### 대시보드 띄우기 (6단계)
 
-공유 자료 세 가지를 받으면 API 키 없이, LLM을 다시 부르지 않고 같은 결과가 나옵니다.
-- DART 원본 zip: 프로젝트 루트에 풀면 `data/raw/dart/`
-- 벡터 DB zip: 프로젝트 루트에 풀면 `data/vectordb/`
-- LLM 결과 CSV: `outputs/reports/news_analysis_sent_v2.csv` (저장소에 있음)
+아래 자료가 있으면 API 키 없이, LLM을 다시 부르지 않고 같은 결과가 나옵니다 (2026-11-20 깨끗한 복제본에서 재현 확인: 약 1분, `db --check` 지문 동일).
+- 제공 뉴스 CSV: `data/raw/news/04_반도체_묶음_반도체_7177건_2023-10-19~2026-10-19.csv` (`config.NEWS_CSV`)
+- DART 원본 zip(공유 드라이브): 프로젝트 루트에 풀면 `data/raw/dart/`
+- 벡터 DB zip(공유 드라이브): 프로젝트 루트에 풀면 `data/vectordb/`
+- LLM 결과 CSV: `outputs/reports/news_analysis_sent_v1.csv`·`sent_v2.csv` (저장소에 있음, 5단계 `--import`가 읽음)
+- zip을 풀면 루트에 안내 파일(`README_*.md`)이 생깁니다. 커밋하지 않습니다.
 
 | 단계 | 명령 (순서대로) | 결과 |
 |---|---|---|
@@ -91,7 +93,8 @@ copy .env.example .env
 | 5. 분석 결과 | `python -m src.eda.spike_detection` → `python -m src.dart.issue_evidence` → `python -m src.dart.issue_summary --apply` → `python -m src.llm.classify --import` | 급증 구간·근거 공시·사건 요약, 기업별 감성 (분류 다시 안 함) |
 | 6. 대시보드 | `streamlit run dashboard/app.py` | 요약 → 이슈 분석 → 공시 Q&A |
 
-- 확인: `python -m src.common.db --check`의 지문이 팀원과 같으면 같은 DB입니다 (아래 '각자 로컬 DB 맞추기').
+- 확인: `python -m src.common.db --check`의 지문이 팀원과 같으면 같은 DB입니다 (아래 '각자 로컬 DB 맞추기'). 기준값: news `f7e3236fe557`, news_tag `01f6c26a483a`, news_analysis `bf08ba263b44`, issues `bdb6940a7323`, disclosure `e314c51fcf4e`, issue_evidence `0eb96da40999`, FK 위반 0건.
+- 실행하면 `outputs/reports/`의 일부 CSV가 다시 저장됩니다. 줄바꿈만 바뀌거나 `disclosure_rag_link_summary.csv`의 '현재_RAG대상' 열(실행 직전 DB 상태)만 달라지는 것은 정상입니다.
 - 공시 Q&A에서 **직접 입력한 질문**만 `OPENAI_API_KEY`가 필요합니다. 예시 질문 9개는 저장된 답변이라 키 없이 보입니다.
 
 ### 다시 만들거나 검수할 때 (선택)
