@@ -2,7 +2,6 @@
 이슈 트렌드·감성 추이 화면 (탭 1). 저장된 분석 결과만 읽고 LLM을 부르지 않는다 (초안 §6 구현 원칙).
 
 화면 구성 (초안 §6 탭 1):
-0. 한눈에 보는 결론 (전체 기간, components/conclusion.py — 초안 §1.4 형식, 숫자는 저장된 결과에서 계산)
 1. 요약: 분석 기사·HBM 비중·급증 구간(공시로 확인/전체)·감성 분류 정확도·확인된 근거 공시 수
 2. HBM 보도 비중 추이 + 급증 구간 띠(확정/제외) + 월별 HBM 기사 수 (단위가 달라 차트를 나눔)
 3. 급증 구간 살펴보기: 사건 요약(확정/제외 이유), 구간 기업별 순감성, 대표 기사(원문 링크·기업별 감성), 사람이 확인한 근거 공시
@@ -33,7 +32,6 @@ if str(ROOT) not in sys.path:  # streamlit은 dashboard/만 경로에 넣으므�
 
 import streamlit as st  # noqa: E402
 
-from dashboard.components import conclusion as cc  # noqa: E402
 from dashboard.components import issue_charts as ic  # noqa: E402
 from dashboard.components import qa_view  # noqa: E402
 from dashboard.data_access import issue_loader as il  # noqa: E402
@@ -56,8 +54,6 @@ def load_all(_key: float) -> dict:
         "monthly": il.monthly_share(), "issues": il.issue_table(),
         "sentiment": il.sentiment_monthly(), "eval": il.eval_summary(),
         "company_monthly": il.company_monthly(), "evidence_counts": il.evidence_counts(),
-        "coverage_full": il.company_coverage(),
-        "highlight_links": il.disclosure_links(config.DB_PATH, [h["rcept_no"] for h in cc.EVIDENCE_HIGHLIGHTS]),
     }
 
 
@@ -77,10 +73,6 @@ data = load_all(DB_KEY)
 all_months = il.month_options(data["monthly"])
 
 hero_slot = st.empty()  # 제목 영역은 맨 위에 두고, 숫자는 필터를 읽은 뒤 채운다
-
-# ── 한눈에 보는 결론 (전체 기간 기준, 필터와 무관 — 리포트 6.3) ──
-facts = cc.compute_facts(data["monthly"], data["issues"], data["coverage_full"], data["sentiment"], data["eval"])
-qa_view.render_html(cc.conclusion_html(facts, data["highlight_links"]))
 
 # ── 필터: 기간(월 범위) · 기업 — 아래 모든 차트·카드·표에 같은 기준으로 적용 ──
 f1, f2 = st.columns([3, 2], gap="large")
