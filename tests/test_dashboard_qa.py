@@ -139,3 +139,22 @@ def test_common_theme_shared_by_pages_and_config():
     pages = [root / "dashboard" / "app.py", *sorted((root / "dashboard" / "pages").glob("*.py"))]
     for page in pages:
         assert "apply_theme()" in page.read_text(encoding="utf-8"), page.name
+
+
+def test_app_opens_issue_page_first_and_registers_every_page():
+    """빈 시작 화면 없이 이슈 분석이 첫 화면이고, pages/의 모든 파일이 메뉴에 등록돼 있다."""
+    from pathlib import Path
+
+    from streamlit.testing.v1 import AppTest
+
+    root = Path(__file__).resolve().parents[1]
+    src = (root / "dashboard" / "app.py").read_text(encoding="utf-8")
+    for page in (root / "dashboard" / "pages").glob("*.py"):
+        assert f'"pages/{page.name}"' in src, page.name
+    assert 'st.Page("pages/1_이슈_분석.py", title="이슈 분석", icon="📈", default=True)' in src
+
+    at = AppTest.from_file(str(root / "dashboard" / "app.py"), default_timeout=60).run()
+    assert not at.exception
+    # 첫 화면은 이슈 분석이다 (DB가 없는 환경이면 이슈 분석의 DB 안내가 뜬다)
+    shown = [m.value for m in at.markdown] + [e.value for e in at.error]
+    assert any("HBM 이슈 모니터링" in s or "README 실행 순서" in s for s in shown)

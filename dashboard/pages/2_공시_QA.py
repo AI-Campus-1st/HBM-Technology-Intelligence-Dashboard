@@ -7,7 +7,7 @@
 - 정밀 검색(선택): 재정렬 모델(requirements/rerank.txt)이 설치돼 있으면 켤 수 있다. CPU에서 질문당 약 1분이라 기본은 끔 (리포트 5.4)
 - 답변 아래에 근거 공시(공시명·제출일·위치·DART 링크·발췌)를 보인다.
 - 벡터 DB·API 키가 없으면 직접 질문은 막고 준비 방법을 안내한다. 예시 답변과 공시 목록은 그대로 보인다.
-실행: streamlit run dashboard/app.py → 왼쪽 메뉴 '공시 QA'
+실행: streamlit run dashboard/app.py → 왼쪽 메뉴 '공시 Q&A'
 
 담당: 한도윤 (공시 분석)
 일정: Day 6
