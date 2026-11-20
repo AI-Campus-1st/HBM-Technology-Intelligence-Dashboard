@@ -13,9 +13,23 @@ LLM 기업별 감성 분류 결과에서 층화 표본을 뽑아 사람이 독�
 지표를 정확도 하나로 내지 않는 이유: 감성 라벨은 불균형(중립·해당없음이 많을 것으로 예상)이라
     다수 라벨만 맞혀도 정확도가 높게 나온다. 라벨마다 F1을 구해 단순 평균한 Macro-F1과 라벨별 재현율을 함께 본다.
 
+이슈 키워드 검수 (Day 7, 가이드 3-1·6 '감성 분류 및 핵심 이슈 추출 정확도를 표본 검수'):
+    4) kw-sample: 감성 표본 1~50행(김한승이 감성 라벨한 행)과 같은 기사·같은 행 번호로
+       data/labels/keyword_review_<버전>.csv를 만든다. LLM 키워드를 보여 주고 사람이 맞은 개수·중심 이슈 포착 여부를 적는다.
+       - 키워드를 보고 판정해야 하므로 블라인드가 아니다 (확인 편향 가능성을 리포트에 적는다).
+       - 채점 기준 (판정 전에 고정, 리포트 4.5):
+         맞음 = 기사 본문에 근거가 있고, 기사가 다루는 HBM 관련 사건·주제를 나타내는 명사구 (프롬프트 규칙 6).
+         틀림 = 기사에 없는 내용, 기사 밖 추론, 기업명·기술명만 있어 이슈가 아님, 기사 전체를 대표하지 못할 만큼 지엽적이거나
+                어떤 기사에도 붙일 수 있을 만큼 일반적인 표현('반도체', 'HBM' 등).
+         kw_core = 기사의 중심 사건(제목·첫 문단이 다루는 사건)을 담은 키워드가 하나라도 있으면 1, 없으면 0.
+    5) kw-score: 키워드 정밀도 = 맞은 키워드 / 전체 키워드, 중심 이슈 포착률 = kw_core 평균 (둘 다 Wilson 95% CI).
+       키워드는 한 기사 안에서 서로 독립이 아니므로 정밀도 CI는 근사치다 (기사 단위 포착률 CI가 더 보수적).
+
 실행: python -m src.llm.validate_sample sample [--n 100] [--force]
       python -m src.llm.validate_sample html      (판정용 원문 페이지: 표본 본문 전체·원문 링크, LLM 판정 없음)
       python -m src.llm.validate_sample score [--version sent_v1]   (기본: 현재 프롬프트 버전)
+      python -m src.llm.validate_sample kw-sample [--force]   (키워드 검수 파일 만들기, 현재 프롬프트 버전)
+      python -m src.llm.validate_sample kw-score              (키워드 검수 채점 → outputs/reports/keyword_eval_<버전>.csv)
 저장: data/labels/sentiment_review_sent_v1.csv (표본 고정, 커밋 대상), outputs/reports/sentiment_eval_<LLM 버전>.csv,
       outputs/reports/sentiment_eval_<LLM 버전>_by_label.csv, outputs/reports/sentiment_eval_<LLM 버전>_confusion.csv
 
@@ -25,6 +39,7 @@ LLM 기업별 감성 분류 결과에서 층화 표본을 뽑아 사람이 독�
 
 import argparse
 import html
+import json
 from pathlib import Path
 
 import numpy as np
@@ -274,6 +289,107 @@ section{{border-bottom:1px solid #eee;padding:18px 0}}h2{{font-size:18px;margin:
     return out
 
 
+# ── 이슈 키워드 검수 ──
+KW_ROWS = 50  # 김한승이 감성 라벨한 1~50행과 같은 기사
+KW_COLUMNS = ["row", "news_id", "published_at", "title", "keywords", "kw_total", "kw_correct", "kw_core", "note", "labeler"]
+
+
+def kw_review_path(version: str = prompts.PROMPT_VERSION) -> Path:
+    return config.LABELS_DIR / f"keyword_review_{version}.csv"
+
+
+def kw_score_path(version: str = prompts.PROMPT_VERSION) -> Path:
+    return REPORTS_DIR / f"keyword_eval_{version}.csv"
+
+
+def build_keyword_review(review: pd.DataFrame, keywords: pd.DataFrame, rows: int = KW_ROWS) -> pd.DataFrame:
+    """감성 표본 앞 rows행 + LLM 이슈 키워드. 판정 칸(kw_correct·kw_core·note·labeler)은 비워 둔다.
+
+    Args:
+        review: 감성 검수 표본 (news_id, published_at, title — 행 순서가 검수 번호)
+        keywords: news_id, issue_keywords(JSON 배열 문자열) — news_analysis의 한 프롬프트 버전
+    """
+    head = review.head(rows)[["news_id", "published_at", "title"]].reset_index(drop=True)
+    kw = keywords.set_index("news_id")["issue_keywords"].map(lambda v: json.loads(v) if v else [])
+    lists = head["news_id"].map(kw)
+    if lists.isna().any():
+        missing = head.loc[lists.isna(), "news_id"].tolist()
+        raise ValueError(f"키워드 결과가 없는 기사: {missing}")
+    out = head.assign(row=range(1, len(head) + 1), keywords=lists.map(" | ".join), kw_total=lists.map(len),
+                      kw_correct="", kw_core="", note="", labeler="")
+    return out[KW_COLUMNS]
+
+
+def _as_int(series: pd.Series, name: str) -> pd.Series:
+    num = pd.to_numeric(series, errors="coerce")
+    if num.isna().any() or (num % 1 != 0).any():
+        raise ValueError(f"{name}에 정수가 아닌 값: {series[num.isna() | (num % 1 != 0)].tolist()}")
+    return num.astype(int)
+
+
+def keyword_score(kw: pd.DataFrame) -> pd.DataFrame:
+    """키워드 검수 채점 (1행 표). kw_correct가 빈 행은 아직 판정 전이라 뺀다.
+
+    precision = 맞은 키워드 합 / 키워드 합, core_capture = 중심 이슈를 담은 기사 비율. 둘 다 Wilson 95% CI.
+    """
+    kw = kw.copy()
+    kw["kw_correct"] = kw["kw_correct"].astype(str).str.strip()
+    done = kw[kw["kw_correct"].ne("") & kw["kw_correct"].ne("nan")]
+    total = _as_int(done["kw_total"], "kw_total")
+    correct = _as_int(done["kw_correct"], "kw_correct")
+    core = _as_int(done["kw_core"].astype(str).str.strip(), "kw_core")
+    if ((correct < 0) | (correct > total)).any():
+        raise ValueError("kw_correct는 0 이상 kw_total 이하여야 합니다: 행 " + str(done.loc[(correct < 0) | (correct > total), "row"].tolist()))
+    if (~core.isin([0, 1])).any():
+        raise ValueError("kw_core는 0 또는 1이어야 합니다: 행 " + str(done.loc[~core.isin([0, 1]), "row"].tolist()))
+    k_kw, n_kw, k_core, n = int(correct.sum()), int(total.sum()), int(core.sum()), len(done)
+    p_low, p_high = wilson_interval(k_kw, n_kw)
+    c_low, c_high = wilson_interval(k_core, n)
+    return pd.DataFrame([{
+        "n_articles": n, "kw_total": n_kw, "kw_correct": k_kw,
+        "precision": k_kw / n_kw if n_kw else float("nan"), "precision_ci_low": p_low, "precision_ci_high": p_high,
+        "core_capture": k_core / n if n else float("nan"), "core_ci_low": c_low, "core_ci_high": c_high,
+        "articles_all_wrong": int(((correct == 0) & (total > 0)).sum()),
+        "kw_per_article": n_kw / n if n else float("nan"),
+    }])
+
+
+def load_keywords(db_path: Path = config.DB_PATH, version: str = prompts.PROMPT_VERSION) -> pd.DataFrame:
+    conn = db.connect(db_path)
+    try:
+        return pd.read_sql_query("SELECT news_id, issue_keywords FROM news_analysis WHERE prompt_version = ?",
+                                 conn, params=(version,))
+    finally:
+        conn.close()
+
+
+def keyword_sample_main(review_path: Path = REVIEW_PATH, db_path: Path = config.DB_PATH,
+                        version: str = prompts.PROMPT_VERSION, path: Path | None = None,
+                        rows: int = KW_ROWS, force: bool = False) -> pd.DataFrame:
+    path = path or kw_review_path(version)
+    if path.exists() and not force:
+        raise SystemExit(f"이미 있습니다: {path}\n판정을 덮어쓰지 않으려고 멈춥니다. 새로 만들려면 --force를 붙이세요.")
+    review = pd.read_csv(review_path, encoding="utf-8-sig", dtype=str, keep_default_na=False)
+    kw = build_keyword_review(review, load_keywords(db_path, version), rows=rows)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    kw.to_csv(path, index=False, encoding="utf-8-sig")
+    print(f"키워드 검수 파일 {len(kw)}건 (감성 표본 1~{len(kw)}행, LLM {version}, 키워드 {int(kw['kw_total'].sum())}개) 저장: {path}")
+    return kw
+
+
+def keyword_score_main(version: str = prompts.PROMPT_VERSION, path: Path | None = None,
+                       out: Path | None = None) -> pd.DataFrame:
+    path, out = path or kw_review_path(version), out or kw_score_path(version)
+    kw = pd.read_csv(path, encoding="utf-8-sig", dtype=str, keep_default_na=False)
+    table = keyword_score(kw)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    table.to_csv(out, index=False, encoding="utf-8-sig")
+    print(f"판정 {int(table.loc[0, 'n_articles'])}/{len(kw)}건 기준 · LLM {version}")
+    print(table.round(3).to_string(index=False))
+    print(f"저장: {out}")
+    return table
+
+
 def main(argv: list | None = None) -> None:
     parser = argparse.ArgumentParser(description="LLM 기업별 감성 분류 표본 검수")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -283,11 +399,18 @@ def main(argv: list | None = None) -> None:
     p_score = sub.add_parser("score", help="사람 라벨과 LLM 판정 비교")
     p_score.add_argument("--version", default=prompts.PROMPT_VERSION, help=f"채점할 LLM 프롬프트 버전 (기본 {prompts.PROMPT_VERSION})")
     sub.add_parser("html", help="판정용 원문 페이지 (본문 전체·원문 링크)")
+    p_kw = sub.add_parser("kw-sample", help="이슈 키워드 검수 파일 만들기 (감성 표본 1~50행)")
+    p_kw.add_argument("--force", action="store_true", help="이미 있는 키워드 검수 파일을 덮어쓴다 (판정이 지워짐)")
+    sub.add_parser("kw-score", help="이슈 키워드 검수 채점 (정밀도·중심 이슈 포착률)")
     args = parser.parse_args(argv)
     if args.cmd == "sample":
         sample_main(n=args.n, force=args.force)
     elif args.cmd == "html":
         html_main()
+    elif args.cmd == "kw-sample":
+        keyword_sample_main(force=args.force)
+    elif args.cmd == "kw-score":
+        keyword_score_main()
     else:
         score_main(llm_version=args.version)
 

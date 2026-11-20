@@ -1,0 +1,2 @@
+﻿n_articles,kw_total,kw_correct,precision,precision_ci_low,precision_ci_high,core_capture,core_ci_low,core_ci_high,articles_all_wrong,kw_per_article
+50,157,156,0.9936305732484076,0.9648062552548128,0.9988747824866672,0.98,0.8950431352816304,0.9964608319110235,0,3.14
