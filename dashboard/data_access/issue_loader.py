@@ -204,6 +204,14 @@ def range_overview(monthly: pd.DataFrame, issues: pd.DataFrame, evidence: dict) 
             "verified_evidence": int(sum(evidence.get(i, 0) for i in issues["issue_id"]))}
 
 
+def disclosure_links(db_path: Path, rcept_nos: list[str]) -> pd.DataFrame:
+    """공시 접수번호 → DART 링크 (결론 카드의 인용 공시 링크용)."""
+    if not rcept_nos:
+        return pd.DataFrame(columns=["rcept_no", "url"])
+    marks = ",".join("?" * len(rcept_nos))
+    return _read(db_path, f"SELECT rcept_no, url FROM disclosure WHERE rcept_no IN ({marks})", tuple(rcept_nos))
+
+
 def eval_summary(path: Path = EVAL_PATH) -> dict:
     """감성 검수 결과 {기업: {n, accuracy, ci_low, ci_high, macro_f1}}. 파일이 없으면 빈 dict."""
     if not path.exists():
