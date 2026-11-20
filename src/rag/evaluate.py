@@ -37,8 +37,6 @@ from src.rag import build_index, qa_chain
 
 EVAL_VERSION = "qa_eval_v1"
 EVAL_PATH = config.LABELS_DIR / f"{EVAL_VERSION}.csv"
-RESULT_PATH = config.OUTPUTS_DIR / "reports" / f"{EVAL_VERSION}.csv"
-SUMMARY_PATH = config.OUTPUTS_DIR / "reports" / f"{EVAL_VERSION}_summary.csv"
 
 
 def paths(version: str = EVAL_VERSION) -> tuple[Path, Path, Path]:

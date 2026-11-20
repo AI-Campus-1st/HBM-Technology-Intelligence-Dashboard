@@ -1,5 +1,5 @@
 """
-대시보드 상단 결론(components/conclusion.py) 테스트. 숫자는 저장된 결과에서 계산되는지, 문장에 그대로 들어가는지 확인한다.
+요약 페이지 숫자(components/conclusion.py) 테스트. 숫자는 저장된 결과에서 계산되는지, 인용 공시는 사람이 확인한 것만인지 확인한다.
 
 담당: 김한승 (이슈 분석)
 일정: Day 7
@@ -48,17 +48,6 @@ def test_negative_share_uses_appearing_articles(tables):
     f = cc.compute_facts(*tables)
     # 삼성: 1~6월 기사 4건(긍1·중1·부2), 7~12월 2건(긍1·중1) → 부정 12 / 등장 36
     assert f["neg_share"]["삼성전자"] == pytest.approx(12 / 36)
-
-
-def test_conclusion_html_contains_facts_and_links(tables):
-    f = cc.compute_facts(*tables)
-    evidence = pd.DataFrame([{"rcept_no": "r1", "url": "https://dart/r1"}])
-    html = cc.conclusion_html(f, evidence)
-    assert "2024-12" in html and "21.3%" not in html and "21.0%" in html   # 계산값 그대로
-    assert "60–90%" in html and "50%" in html and "~" not in html  # 취소선 방지
-    assert "0.78" in html and "0.88" in html and "표본 50건" in html
-    assert "HBM 투자액" in html                                        # 공시로 확인 못 하는 부분 명시
-    assert 'href="https://dart/r1"' in html or "공시 링크 없음" in html
 
 
 def test_highlights_reference_verified_evidence_only():
