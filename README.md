@@ -141,8 +141,8 @@ mid_project/
 │   └── rag/      [한도윤]        #   청킹·임베딩·질의응답
 │
 ├── dashboard/                    # 📊 Streamlit 대시보드 (저장된 결과만 조회)
-│   ├── app.py    [공동]          #   진입점, 페이지 연결 (첫 화면 = 이슈 분석)
-│   ├── pages/                    #   화면별 파일 (김한승: 이슈 분석, 한도윤: 공시 Q&A)
+│   ├── app.py    [공동]          #   진입점, 페이지 연결 (첫 화면 = 요약)
+│   ├── pages/                    #   화면별 파일 (공동: 요약, 김한승: 이슈 분석, 한도윤: 공시 Q&A)
 │   ├── components/               #   필터·차트·Q&A UI 조각
 │   └── data_access/              #   DB·벡터 DB 조회 함수
 │
@@ -262,11 +262,12 @@ mid_project/
 
 | 파일 | 담당 | 목적 |
 |---|---|---|
-| `app.py` | 공동 | 진입점. 공통 테마와 페이지 연결(`st.navigation`, 첫 화면 = 이슈 분석)만 두고 로직은 넣지 않아 충돌을 줄인다. 페이지를 추가하면 여기에 등록한다. |
+| `app.py` | 공동 | 진입점. 공통 테마와 페이지 연결(`st.navigation`, 첫 화면 = 요약)만 두고 로직은 넣지 않아 충돌을 줄인다. 페이지를 추가하면 여기에 등록한다. |
+| `pages/0_요약.py` | 공동 | 첫 화면. "지금 무슨 일이 일어나고 있고 근거는 무엇인가"에 질문 → 한 줄 답 → 근거 카드 3장 → 한계로 답한다 (숫자는 `conclusion.compute_facts`, 화면은 `components/summary.py`). |
 | `pages/1_이슈_분석.py` | 김한승 | HBM 이슈 비중·급증 추이, 기업별 보도 점유·감성 비교 화면. |
 | `pages/2_공시_QA.py` | 한도윤 | 공시 Q&A 화면: 예시 질문은 저장된 답변(API 호출 없음), 직접 질문은 실시간 → 답변·근거 공시 카드(DART 링크·발췌), 거절 표시, 검색 대상 공시 101건 목록(기업·유형 필터). |
 | `components/filters.py` | 공동 | 기간·기업(SK하이닉스/삼성전자)·카테고리·기술 태그 공통 필터. 모든 차트가 이 값을 받는다. |
-| `components/conclusion.py` | 공동 | 결론 문구 생성(숫자 계산·원문 대조한 공시 인용). 현재 화면에서는 쓰지 않으며 요약 페이지 재사용용(리포트 6.5). |
+| `components/conclusion.py` | 공동 | 요약 페이지 숫자 계산(`compute_facts`)과 사람이 확인한 사건·인용 공시 상수. 화면은 `summary.py`가 그린다. |
 | `components/theme.py` | 공동 | 대시보드 전체 공통 어두운 테마(Spotify 디자인 문서 참조). 모든 페이지 맨 위에서 `theme.apply_theme()`를 부른다. |
 | `components/issue_charts.py` | 김한승 | Plotly 이슈·감성 차트 함수. |
 | `components/qa_view.py` | 한도윤 | 답변·근거 카드·공시 목록 HTML과 탭 2 전용 CSS(`.qa-*`). |

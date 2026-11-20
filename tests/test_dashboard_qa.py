@@ -154,27 +154,31 @@ def test_common_theme_shared_by_pages_and_config():
     assert ".qa-hero" in qa_view.QA_CSS and ":root" not in qa_view.QA_CSS
     # 공용 config.toml도 같은 색이다
     cfg = (root / ".streamlit" / "config.toml").read_text(encoding="utf-8")
-    assert 'base = "dark"' in cfg and theme.COLORS["bg"] in cfg and theme.GREEN in cfg
+    assert 'base = "dark"' in cfg and theme.COLORS["bg"] in cfg and theme.COLORS["green"] in cfg
     # 모든 페이지가 공통 테마를 부른다
     pages = [root / "dashboard" / "app.py", *sorted((root / "dashboard" / "pages").glob("*.py"))]
     for page in pages:
         assert "apply_theme()" in page.read_text(encoding="utf-8"), page.name
 
 
-def test_app_opens_issue_page_first_and_registers_every_page():
-    """빈 시작 화면 없이 이슈 분석이 첫 화면이고, pages/의 모든 파일이 메뉴에 등록돼 있다."""
+def test_app_opens_summary_first_and_registers_every_page():
+    """첫 화면은 요약이고, pages/의 모든 파일이 메뉴에 등록돼 있다. 요약 카드 링크의 url_path도 app.py와 같다."""
     from pathlib import Path
 
     from streamlit.testing.v1 import AppTest
+
+    from dashboard.components import summary as sm
 
     root = Path(__file__).resolve().parents[1]
     src = (root / "dashboard" / "app.py").read_text(encoding="utf-8")
     for page in (root / "dashboard" / "pages").glob("*.py"):
         assert f'"pages/{page.name}"' in src, page.name
-    assert 'st.Page("pages/1_이슈_분석.py", title="이슈 분석", icon="📈", default=True)' in src
+    assert 'st.Page("pages/0_요약.py", title="요약", icon="🧭", default=True)' in src
+    assert src.count("default=True") == 1
+    assert f'url_path="{sm.ISSUE_PAGE}"' in src and f'url_path="{sm.QA_PAGE}"' in src
 
     at = AppTest.from_file(str(root / "dashboard" / "app.py"), default_timeout=60).run()
     assert not at.exception
-    # 첫 화면은 이슈 분석이다 (DB가 없는 환경이면 이슈 분석의 DB 안내가 뜬다)
+    # 첫 화면은 요약이다 (DB가 없는 환경이면 요약의 DB 안내가 뜬다)
     shown = [m.value for m in at.markdown] + [e.value for e in at.error]
-    assert any("HBM 이슈 모니터링" in s or "README 실행 순서" in s for s in shown)
+    assert any(sm.QUESTION in s or "README 실행 순서" in s for s in shown)
