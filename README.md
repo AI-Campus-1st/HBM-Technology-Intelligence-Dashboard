@@ -141,7 +141,8 @@ mid_project/
 │   ├── conventions.md            #   협업 규칙 (브랜치, 커밋, 파일 소유권)
 │   ├── daily_log/                #   날짜·사람별 작업 일지
 │   ├── report/                   #   최종 리포트 (장별 파일 + 통합본 리포트_통합본.md)
-│   └── presentation/             #   발표 PPT, 스크린샷
+│   ├── presentation/             #   발표 PPT, 스크린샷
+│   └── resources/                #   리포트·발표용 그림 (DB 스키마 ERD)
 │
 ├── src/                          # 🔧 수집·분석 코드 (대시보드와 분리된 계층)
 │   ├── common/   [공동]          #   설정, 스키마, DB 연결
@@ -165,7 +166,6 @@ mid_project/
 │   └── labels/   (커밋 O)        #   사람이 만든 표본 검수 결과
 │
 ├── sql/                          # 🗃️ SQL 분석 쿼리 (01~04 김한승 뉴스, 05 한도윤 공시)
-├── notebooks/                    # 🧪 탐색용 노트북 (김한승_issue / 한도윤_disclosure / shared)
 ├── outputs/                      # 📈 리포트·발표용 그림과 표
 └── tests/                        # ✅ 테스트
 ```
@@ -202,6 +202,7 @@ mid_project/
 | `report/01~07_*.md` | 리포트 7개 장(분석 목적·데이터·EDA·AI 이슈 분석·공시 Q&A·대시보드·회고)을 파일로 나눠 동시에 써도 충돌이 적다. |
 | `report/00_핵심_요약.md` · `리포트_통합본.md` | 0장 핵심 요약(질문·답·발견·신뢰도·권고)과, 0~7장을 목차와 함께 한 문서로 묶은 통합본. 통합본은 `src/common/build_report.py`가 만든다 (위 실행 순서 표). |
 | `presentation/` | 발표 PPT(포트폴리오용)와 대시보드 스크린샷. |
+| `resources/` | 리포트·발표에 쓰는 그림. DB 스키마 ERD(`erd_v1.3.png`·`.svg`). |
 
 ### `src/common/` — 공동 기반 [공동, 변경 시 PR로 합의]
 
@@ -306,7 +307,6 @@ mid_project/
 
 | 경로 | 목적 |
 |---|---|
-| `notebooks/김한승_issue`, `한도윤_disclosure`, `shared` | 탐색용 노트북. 사람별 폴더 분리, **출력 지우고 커밋**. 확정 로직은 `src/`로 옮긴다. |
 | `outputs/figures/` | 차트 이미지 (자동 생성, git 제외). |
 | `outputs/reports/` | 표본 검수 정확도표 등 리포트에 넣을 표. |
 | `tests/` | 모듈별 테스트 (`test_<모듈>.py`). API를 부르지 않는다. |
@@ -319,5 +319,5 @@ mid_project/
 2. **`main`에 직접 push하지 않는다.** `issue/작업명`(김한승), `disclosure/작업명`(한도윤), `common/작업명`(공동) 브랜치 → PR → 상대 리뷰 후 merge.
 3. **작업 시작 전·PR 전 `git pull origin main`.**
 4. **패키지 추가는 자기 `requirements/*.txt`에만.**
-5. **API 키는 `.env`에만.** 코드·노트북 출력·발표자료에 키가 없는지 확인.
+5. **API 키는 `.env`에만.** 코드·발표자료에 키가 없는지 확인.
 6. **스키마 변경은 `src/common/schema.py` + `docs/schema.md`를 같은 PR에서.**
