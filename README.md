@@ -1,6 +1,6 @@
 # AI 기반 HBM 기술 경쟁 분석 — SK하이닉스 vs 삼성전자 기술 인텔리전스 대시보드
 
-**HBM Technology Intelligence Dashboard** · 기획 v1.2
+**HBM Technology Intelligence Dashboard**
 
 > **"HBM 경쟁에서 SK하이닉스와 삼성전자에 대한 시장의 관심과 이슈는 시기별로 어떻게 달라졌으며, 공시로 확인되는 대응과 애널리스트가 추가로 확인해야 할 기회·위험 신호는 무엇인가?"**
 
@@ -13,7 +13,7 @@
 | 기간 / 인원 | 7일 / 2인 1조 |
 | 산업군 | 반도체 |
 | 대상 기업 | **SK하이닉스** (비교: **삼성전자**) — 두 기업 모두 DART 공시 수집 |
-| 분석 기술 범위 | **HBM 단독** (패키징·DRAM은 기사 수가 적어 HBM 기사 안의 보조 정보로만 사용, 2026-11-16 확정) |
+| 분석 기술 범위 | **HBM 단독** (패키징·DRAM은 기사 수가 적어 HBM 기사 안의 보조 정보로만 사용) |
 | 뉴스 데이터 | 제공 반도체 묶음 7,177건 (2023-10-19 ~ 2026-10-19) — `반도체 수출 통제` · `반도체 세제 혜택` (규제 및 정책) / `반도체 R&D` (기술 및 트렌드) / `반도체 밸류체인` · `반도체 원자재` (공급망 및 인프라) |
 | 분석 기간 | **2023-10-19 ~ 2026-10-19** (뉴스·공시 동일 기간, 월별 집계) |
 | 기술 | Python(Pandas·NumPy) · 정규표현식 · DART OpenAPI · LLM API · LangChain · VectorDB · Plotly · Streamlit |
@@ -43,7 +43,7 @@
 - 회사 전체 R&D 지출은 HBM 투자액이 아니며, 사업 구조가 다른 삼성전자와 전체 수치를 직접 비교하지 않는다.
 - 같은 시점에 뉴스와 공시가 있다고 해서 인과관계로 해석하지 않는다.
 
-> 기획 상세(데이터 1차 점검 결과, 지표 정의, 검증 설계, 대시보드 구성, 일정)는 [docs/guidelines/초안_v1.2.md](docs/guidelines/초안_v1.2.md)를 참고합니다.
+> 분석 결과와 판단 근거는 리포트 통합본 [docs/report/리포트_통합본.md](docs/report/리포트_통합본.md)에 있습니다. 결론만 보려면 0장 핵심 요약부터 읽습니다.
 
 ### 역할
 
@@ -77,7 +77,7 @@ copy .env.example .env
 
 ### 대시보드 띄우기 (6단계)
 
-아래 자료가 있으면 API 키 없이, LLM을 다시 부르지 않고 같은 결과가 나옵니다 (2026-11-20 깨끗한 복제본에서 재현 확인: 약 1분, `db --check` 지문 동일).
+아래 자료가 있으면 API 키 없이, LLM을 다시 부르지 않고 같은 결과가 나옵니다 (깨끗한 복제본에서 재현 확인: 약 1분, `db --check` 지문 동일).
 - 제공 뉴스 CSV: `data/raw/news/04_반도체_묶음_반도체_7177건_2023-10-19~2026-10-19.csv` (`config.NEWS_CSV`)
 - DART 원본 zip(공유 드라이브): 프로젝트 루트에 풀면 `data/raw/dart/`
 - 벡터 DB zip(공유 드라이브): 프로젝트 루트에 풀면 `data/vectordb/`
@@ -137,7 +137,7 @@ mid_project/
 │
 ├── docs/                         # 📚 모든 문서
 │   ├── guidelines/               #   과제 가이드라인, 일일 체크리스트 등 받은/정리한 참고 문서
-│   ├── schema.md                 #   뉴스·공시 통합 스키마 (Day 1 확정)
+│   ├── schema.md                 #   뉴스·공시 통합 스키마
 │   ├── conventions.md            #   협업 규칙 (브랜치, 커밋, 파일 소유권)
 │   ├── daily_log/                #   날짜·사람별 작업 일지
 │   ├── report/                   #   최종 리포트 (장별 파일 + 통합본 리포트_통합본.md)
@@ -196,11 +196,11 @@ mid_project/
 | 경로 | 목적 |
 |---|---|
 | `guidelines/` | 과제 가이드라인(`중간프로젝트_가이드_...md`), 일일 체크리스트 등 **참고용 문서**를 모아 둔다. 새로 받은 안내 문서도 여기에 넣는다. |
-| `schema.md` | 뉴스·공시 통합 스키마. Day 1에 확정하면 이후 두 사람이 서로 기다리지 않고 병행할 수 있다. `src/common/schema.py`와 항상 같이 고친다. |
+| `schema.md` | 뉴스·공시 통합 스키마. 먼저 확정해 두 사람이 서로 기다리지 않고 병행했다. `src/common/schema.py`와 항상 같이 고친다. |
 | `conventions.md` | 브랜치·커밋 규칙, 파일 소유권, 충돌 방지 방법 정리. |
 | `daily_log/` | `YYYY-MM-DD_김한승.md`처럼 날짜·사람별 일지. 판단 근거를 남겨 리포트·회고에 쓴다. `_TEMPLATE.md`를 복사해 사용. |
 | `report/01~07_*.md` | 리포트 7개 장(분석 목적·데이터·EDA·AI 이슈 분석·공시 Q&A·대시보드·회고)을 파일로 나눠 동시에 써도 충돌이 적다. |
-| `report/00_핵심_요약.md` · `리포트_통합본.md` | 0장 핵심 요약(질문·답·발견·신뢰도·권고)과, 0~7장을 목차와 함께 한 문서로 묶은 통합본. 통합본은 장을 고친 뒤 `python -m src.common.build_report`로 다시 만든다(테스트가 최신인지 확인). |
+| `report/00_핵심_요약.md` · `리포트_통합본.md` | 0장 핵심 요약(질문·답·발견·신뢰도·권고)과, 0~7장을 목차와 함께 한 문서로 묶은 통합본. 통합본은 `src/common/build_report.py`가 만든다 (위 실행 순서 표). |
 | `presentation/` | 발표 PPT(포트폴리오용)와 대시보드 스크린샷. |
 
 ### `src/common/` — 공동 기반 [공동, 변경 시 PR로 합의]
@@ -210,28 +210,31 @@ mid_project/
 | `config.py` | `.env` 로딩, 경로 상수(`DATA_DIR`, `DB_PATH`, `VECTORDB_DIR`). 키는 `os.getenv`로만 읽는다. |
 | `schema.py` | 테이블·컬럼 정의 (`docs/schema.md`와 동일하게 유지). |
 | `db.py` | DB 연결(FK 켜기), 테이블 생성·재생성, `read_table`·`write_table`(재실행해도 같은 결과), `--check`로 두 컴퓨터 DB 비교. |
+| `build_report.py` | 리포트 장 파일(`docs/report/00~07_*.md`)을 목차와 함께 `리포트_통합본.md` 한 문서로 묶는다. `--check`는 통합본이 최신인지만 확인. |
 
 ### `src/news/` — 뉴스 [김한승]
 
-| 파일 | 일정 | 목적 |
-|---|---|---|
-| `load_news.py` | Day 2 | 제공 뉴스(`data/raw/news`)를 스키마에 맞춰 DB에 적재. |
-| `preprocess.py` | Day 3 | 정규표현식 정제, 중복 기사 제거, 키워드별 무관 기사 필터링. |
+| 파일 | 목적 |
+|---|---|
+| `load_news.py` | 제공 뉴스(`data/raw/news`)를 스키마에 맞춰 DB에 적재. |
+| `preprocess.py` | 정규표현식 정제, 중복 기사 표시, HBM·기업 태그 저장(`news_tag`). |
+| `tagging.py` | 정규표현식 기술·기업 태그와 관련도 등급(핵심·관련·언급) 규칙 (`regex_v3`). |
+| `tag_validation.py` | 태깅 규칙 정밀도 표본 검수 (sample → 라벨 → score). |
 
 ### `src/dart/` — DART 공시 [한도윤]
 
-| 파일 | 일정 | 목적 |
-|---|---|---|
-| `corp_code.py` | Day 1 | `corpCode.xml`로 SK하이닉스·삼성전자 `corp_code` 확인. |
-| `collect_list.py` | Day 2 | `list.json` 공시 목록 수집 (기간 `20231019`~`20261019`, `config.DART_BGN_DE`~`DART_END_DE`). 요청 간 딜레이, 원본 저장, 재실행 시 이미 받은 건 건너뛰기. |
-| `collect_documents.py` | Day 2 | 공시서류원본파일 API로 원문 다운로드. |
-| `collect_attachments.py` | Day 4 | 실적 공시의 첨부 경영설명회 PDF(국문)를 DART 웹 화면에서 받아 쪽별 텍스트 추출 (OpenAPI zip에는 첨부가 없음). [기재정정]의 첨부는 정정 전 원래 공시 번호로 받는다. |
-| `parse_documents.py` | Day 2~3 | 원문에서 텍스트를 추출해 DB에 적재. 정기보고서를 'II. 사업의 내용' 소제목(사업·제품·투자·연구개발)과 삼성전자 연구개발실적(상세)으로 나누고, R&D 비용·매출 대비 비율·시설투자액을 뽑는다. |
-| `relevance_review.py` | Day 2~3 | 공시 관련성 표본 검수 (sample → 라벨 → score). |
-| `issue_evidence.py` | Day 3 | 급증 구간(`issues`)별 근거 공시 후보: 구간 안 기사와 연결된 공시(`키워드`) + 구간 안 사건성 공시(`기간`). 사람 확인 결과(`data/labels/issue_evidence_review_v1.csv`)를 반영해 `issue_evidence`를 다시 쓴다. |
-| `issue_summary.py` | Day 6 | 사건 요약 라벨 점검과 `issues.summary` 반영(확정 행만). `spike_detection`은 고치지 않고 그 다음에 실행한다. |
-| `sql_report.py` | Day 3 | `sql/05_*.sql` 공시 집계 쿼리를 실행해 `outputs/reports/sql05_*.csv`로 저장. |
-| `news_link.py` | Day 3 | HBM 기사와 공시 연결(`link_v2`: 주 대상 기업·±7일·주제) → `issue_evidence` 후보, RAG 대상 재선정(A 정기공시 + HBM 언급 + 뉴스 연결, 실적 주제만으로 연결된 공시는 제외). |
+| 파일 | 목적 |
+|---|---|
+| `corp_code.py` | `corpCode.xml`로 SK하이닉스·삼성전자 `corp_code` 확인. |
+| `collect_list.py` | `list.json` 공시 목록 수집 (기간 `20231019`~`20261019`, `config.DART_BGN_DE`~`DART_END_DE`). 요청 간 딜레이, 원본 저장, 재실행 시 이미 받은 건 건너뛰기. |
+| `collect_documents.py` | 공시서류원본파일 API로 원문 다운로드. |
+| `collect_attachments.py` | 실적 공시의 첨부 경영설명회 PDF(국문)를 DART 웹 화면에서 받아 쪽별 텍스트 추출 (OpenAPI zip에는 첨부가 없음). [기재정정]의 첨부는 정정 전 원래 공시 번호로 받는다. |
+| `parse_documents.py` | 원문에서 텍스트를 추출해 DB에 적재. 정기보고서를 'II. 사업의 내용' 소제목(사업·제품·투자·연구개발)과 삼성전자 연구개발실적(상세)으로 나누고, R&D 비용·매출 대비 비율·시설투자액을 뽑는다. |
+| `relevance_review.py` | 공시 관련성 표본 검수 (sample → 라벨 → score). |
+| `issue_evidence.py` | 급증 구간(`issues`)별 근거 공시 후보: 구간 안 기사와 연결된 공시(`키워드`) + 구간 안 사건성 공시(`기간`). 사람 확인 결과(`data/labels/issue_evidence_review_v1.csv`)를 반영해 `issue_evidence`를 다시 쓴다. |
+| `issue_summary.py` | 사건 요약 라벨 점검과 `issues.summary` 반영(확정 행만). `spike_detection`은 고치지 않고 그 다음에 실행한다. |
+| `sql_report.py` | `sql/05_*.sql` 공시 집계 쿼리를 실행해 `outputs/reports/sql05_*.csv`로 저장. |
+| `news_link.py` | HBM 기사와 공시 연결(`link_v2`: 주 대상 기업·±7일·주제) → `issue_evidence` 후보, RAG 대상 재선정(A 정기공시 + HBM 언급 + 뉴스 연결, 실적 주제만으로 연결된 공시는 제외). |
 
 ### `sql/` — SQL 분석 쿼리
 
@@ -250,36 +253,36 @@ mid_project/
 |---|---|---|
 | `news_trend.py` | 김한승 | 월별 기사량·HBM 비중·기업 점유, 카테고리별 무관 기사 비중. |
 | `news_sql_report.py` | 김한승 | `sql/01~03_*.sql` 뉴스 집계 쿼리 실행 → `outputs/reports/sql01~03_*.csv` (실행 함수는 `src/dart/sql_report.py` 재사용). |
-| `disclosure_trend.py` | 한도윤 | 기업 × 유형 × 월 공시 건수, 공시 성격(투자·실적·풍문 등) 분류, 사건성 공시 타임라인. 필터 인자를 받아 대시보드에서 재사용. |
+| `disclosure_trend.py` | 한도윤 | 기업 × 유형 × 월 공시 건수, 공시 성격(투자·실적·풍문 등) 분류, 사건성 공시 타임라인. |
 | `spike_detection.py` | 공동 | 이슈 급증 시점 탐지 및 저장. |
 
 ### `src/llm/` — LLM 이슈 분석 [김한승]
 
-| 파일 | 일정 | 목적 |
-|---|---|---|
-| `prompts.py` | Day 4 | 감성 분류·이슈 추출 프롬프트 (버전 관리 → 리포트에 설계 과정 기록). |
-| `classify.py` | Day 4 | 배치로 분류해 결과를 DB에 **미리 저장** (대시보드 실시간 호출 금지). |
-| `validate_sample.py` | Day 4 | 표본 추출 → 사람 검수 CSV(`data/labels/`) → 정확도 계산. |
+| 파일 | 목적 |
+|---|---|
+| `prompts.py` | 감성 분류·이슈 추출 프롬프트 (버전 관리 → 리포트에 설계 과정 기록). |
+| `classify.py` | 배치로 분류해 결과를 DB에 **미리 저장** (대시보드 실시간 호출 금지). |
+| `validate_sample.py` | 표본 추출 → 사람 검수 CSV(`data/labels/`) → 정확도 계산. |
 
 ### `src/rag/` — 공시 Q&A [한도윤]
 
-| 파일 | 일정 | 목적 |
-|---|---|---|
-| `chunking.py` | Day 3 | RAG 대상 공시를 청크(1,000자, 겹침 150자)로 나누고 공시명·제출일·링크·섹션 메타데이터를 붙인다. 정기보고서는 사업·제품·투자·연구개발 섹션만, 표는 행 단위로 묶어서 자른다. |
-| `build_index.py` | Day 5 | 청크를 `text-embedding-3-small`로 임베딩해 Chroma(`data/vectordb`, 컬렉션 `disclosure_chunks`)에 **미리 저장**. `manifest.json`에 모델·청크 수·청크 지문을 남겨 공유본을 맞춰 본다. |
-| `qa_chain.py` | Day 5 | 공시 근거 질의응답. 기업 필터(비교 질문은 기업별 검색) → 벡터 후보 40개 + 키워드(BM25) RRF 재정렬 → `gpt-6-luna` 구조화 답변. 출처(공시명·제출일·링크·첨부 쪽)를 붙이고, 검색 거리 기준·LLM 판단으로 근거가 없으면 거절한다. 선택: 교차 인코더 재정렬(`--rerank`, 대시보드 '정밀 검색'). |
-| `evaluate.py` | Day 5 | 평가 질문(정답 근거·핵심 사실)으로 검색 적중(하이브리드 vs 벡터만)·답변 정확·거절 정확·위임장(D) 비중·거리 분포를 잰다. |
+| 파일 | 목적 |
+|---|---|
+| `chunking.py` | RAG 대상 공시를 청크(1,000자, 겹침 150자)로 나누고 공시명·제출일·링크·섹션 메타데이터를 붙인다. 정기보고서는 사업·제품·투자·연구개발 섹션만, 표는 행 단위로 묶어서 자른다. |
+| `build_index.py` | 청크를 `text-embedding-3-small`로 임베딩해 Chroma(`data/vectordb`, 컬렉션 `disclosure_chunks`)에 **미리 저장**. `manifest.json`에 모델·청크 수·청크 지문을 남겨 공유본을 맞춰 본다. |
+| `qa_chain.py` | 공시 근거 질의응답. 기업 필터(비교 질문은 기업별 검색) → 벡터 후보 40개 + 키워드(BM25) RRF 재정렬 → `gpt-6-luna` 구조화 답변. 출처(공시명·제출일·링크·첨부 쪽)를 붙이고, 검색 거리 기준·LLM 판단으로 근거가 없으면 거절한다. 선택: 교차 인코더 재정렬(`--rerank`, 대시보드 '정밀 검색'). |
+| `evaluate.py` | 평가 질문(정답 근거·핵심 사실)으로 검색 적중(하이브리드 vs 벡터만)·답변 정확·거절 정확·위임장(D) 비중·거리 분포를 잰다. |
 
 ### `dashboard/` — Streamlit
 
 | 파일 | 담당 | 목적 |
 |---|---|---|
 | `app.py` | 공동 | 진입점. 공통 테마와 페이지 연결(`st.navigation`, 첫 화면 = 요약)만 두고 로직은 넣지 않아 충돌을 줄인다. 페이지를 추가하면 여기에 등록한다. |
-| `pages/0_요약.py` | 공동 | 첫 화면. "지금 무슨 일이 일어나고 있고 근거는 무엇인가"에 질문 → 한 줄 답 → 근거 카드 3장 → 한계로 답한다 (숫자는 `conclusion.compute_facts`, 화면은 `components/summary.py`). |
+| `pages/0_요약.py` | 공동 | 첫 화면. "지금 무슨 일이 일어나고 있고 근거는 무엇인가"에 질문 → 한 줄 답 → 근거 카드 3장 → 애널리스트 권고 → 한계로 답한다 (숫자는 `conclusion.compute_facts`, 화면은 `components/summary.py`). |
 | `pages/1_이슈_분석.py` | 김한승 | HBM 이슈 비중·급증 추이, 기업별 보도 점유·감성 비교 화면. |
-| `pages/2_공시_QA.py` | 한도윤 | 공시 Q&A 화면: 예시 질문은 저장된 답변(API 호출 없음), 직접 질문은 실시간 → 답변·근거 공시 카드(DART 링크·발췌), 거절 표시, 검색 대상 공시 101건 목록(기업·유형 필터). |
-| `components/filters.py` | 공동 | 기간·기업(SK하이닉스/삼성전자)·카테고리·기술 태그 공통 필터. 모든 차트가 이 값을 받는다. |
+| `pages/2_공시_QA.py` | 한도윤 | 공시 Q&A 화면: 예시 질문은 저장된 답변(API 호출 없음), 직접 질문은 실시간 → 답변·근거 공시 카드(DART 링크·발췌), 거절 표시, 검색 대상 공시 101건 목록(기간·기업·유형 필터). |
 | `components/conclusion.py` | 공동 | 요약 페이지 숫자 계산(`compute_facts`)과 사람이 확인한 사건·인용 공시 상수. 화면은 `summary.py`가 그린다. |
+| `components/summary.py` | 공동 | 요약 페이지 화면 조각(한 줄 답·근거 카드·권고·한계). 사람의 판단 문구는 여기에 고정한다. |
 | `components/theme.py` | 공동 | 대시보드 전체 공통 어두운 테마(Spotify 디자인 문서 참조). 모든 페이지 맨 위에서 `theme.apply_theme()`를 부른다. |
 | `components/issue_charts.py` | 김한승 | Plotly 이슈·감성 차트 함수. |
 | `components/qa_view.py` | 한도윤 | 답변·근거 카드·공시 목록 HTML과 탭 2 전용 CSS(`.qa-*`). |
@@ -306,7 +309,7 @@ mid_project/
 | `notebooks/김한승_issue`, `한도윤_disclosure`, `shared` | 탐색용 노트북. 사람별 폴더 분리, **출력 지우고 커밋**. 확정 로직은 `src/`로 옮긴다. |
 | `outputs/figures/` | 차트 이미지 (자동 생성, git 제외). |
 | `outputs/reports/` | 표본 검수 정확도표 등 리포트에 넣을 표. |
-| `tests/test_news.py`, `tests/test_dart.py` | 담당별 테스트 파일 (김한승 / 한도윤). |
+| `tests/` | 모듈별 테스트 (`test_<모듈>.py`). API를 부르지 않는다. |
 
 ---
 

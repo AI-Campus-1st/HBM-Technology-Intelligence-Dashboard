@@ -3,7 +3,7 @@
 > 변경 시 `src/common/schema.py`와 이 문서를 **같은 PR**에서 함께 고친다. 둘이 어긋나면 `tests/test_schema.py`가 실패한다.
 > DB는 SQLite(`data/db/hbm.db`), 테이블 생성은 `src.common.schema.create_all()`.
 
-**v1.3** — 근거: `docs/guidelines/초안_v1.2.md` §4.4 (뉴스 파일 교체에 따라 category 사용, 급증 구간을 월 단위로 변경), §11 공시 범위 결정(2026-11-16, 리포트 2.3)
+**v1.3** — 버전별 변경 내용은 맨 아래 '변경 이력'
 
 ## 테이블 관계
 
@@ -18,7 +18,7 @@ news ─┬─< news_tag        (규칙 기반 기술·기업 태그, 기사당 
 
 ## news (담당 김한승)
 
-제공 뉴스 원본을 적재한 테이블. 정제·중복 표시는 Day 3에 같은 테이블에 채운다.
+제공 뉴스 원본을 적재한 테이블. 중복 표시(`is_duplicate`·`dup_group_id`)는 `preprocess`가 같은 테이블에 채운다. 정제한 본문은 저장하지 않는다.
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -47,7 +47,7 @@ news ─┬─< news_tag        (규칙 기반 기술·기업 태그, 기사당 
 | body_count | INTEGER | NOT NULL | 본문 언급 횟수 |
 | rule_version | TEXT | NOT NULL | 태깅 규칙 버전 |
 
-관련도 기준(regex_v2): **핵심** 제목 포함 / **관련** 본문 5회 이상 / **언급** 본문 1~4회. 분석에는 핵심+관련만 쓰고, 기업 태그는 HBM 핵심·관련 기사 안에서만 집계한다. `in_title`·`body_count`를 함께 저장해 기준을 바꿔도 원문을 다시 읽지 않고 재계산할 수 있다.
+관련도 기준(regex_v2부터, 현재 regex_v3): **핵심** 제목 포함 / **관련** 본문 5회 이상 / **언급** 본문 1~4회. 분석에는 핵심+관련만 쓰고, 기업 태그는 HBM 핵심·관련 기사 안에서만 집계한다. `in_title`·`body_count`를 함께 저장해 기준을 바꿔도 원문을 다시 읽지 않고 재계산할 수 있다.
 
 ## news_analysis (담당 김한승, LLM 결과)
 
@@ -64,7 +64,7 @@ PK에 `prompt_version`을 넣어 v1·v2 결과를 함께 보관하고 검수 정
 
 ## issues (담당 김한승)
 
-HBM 비중 급증 구간 (월 단위). Day 3에 생성해 한도윤에게 전달한다 (근거 연결의 입력).
+HBM 비중 급증 구간 (월 단위). `spike_detection`이 만들고, 근거 공시 연결(`issue_evidence`)의 입력이 된다.
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -77,7 +77,7 @@ HBM 비중 급증 구간 (월 단위). Day 3에 생성해 한도윤에게 전달
 | baseline_share | REAL | | 최고 비중 달의 기준선 평균 비중 (직전 6개월, 급증 달 제외, 0~1) |
 | article_count | INTEGER | NOT NULL | 구간 내 관련 기사 수 (중복 제외) |
 | method | TEXT | NOT NULL | 탐지 기준·버전 (예: rolling6m_2sigma_exclude_spikes_min10_v1) |
-| summary | TEXT | | 사건 요약 (검토 후 작성) |
+| summary | TEXT | | 사건 요약 (공시로 확인된 확정 구간만, 리포트 3.5) |
 
 ## disclosure (담당 한도윤)
 
@@ -95,13 +95,13 @@ DART 공시 한 건당 한 행. `collect_list`가 목록을 넣고(`text_status=
 | url | TEXT | NOT NULL | 원문 링크 |
 | text | TEXT | | 추출 본문 (확보 전·대상 아님·실패면 NULL) |
 | text_status | TEXT | NOT NULL, 기본 `대기`, `대기` / `확보` / `대상아님` / `실패` | 원문 확보 상태 |
-| rag_target | INTEGER | NOT NULL, 기본 0, 0/1 | RAG 사용 여부 (news_link link_v2가 정함: A 정기공시 + 본문 HBM 언급 + 실적 외 주제로 HBM 기사와 연결된 공시). `parse_documents`는 Day 2 유형 필터로 채우고, `news_link --apply`가 덮어쓴다 |
+| rag_target | INTEGER | NOT NULL, 기본 0, 0/1 | RAG 사용 여부 (news_link link_v2가 정함: A 정기공시 + 본문 HBM 언급 + 실적 외 주제로 HBM 기사와 연결된 공시 + 첨부 경영설명회 자료에 HBM이 나오는 실적 공시). `parse_documents`는 처음 정한 유형 필터로 채우고, `news_link --apply`가 덮어쓴다 |
 | filter_reason | TEXT | | 대상아님·실패·RAG 제외 사유 (예: `I_공시명`, `J_본문키워드없음`, `다운로드오류`) |
 
 - 원문 확보율 = `text_status='확보'` 건수 / (`확보` + `실패`) 건수. `대상아님`은 분모에서 뺀다.
 - 공시 건수 추이(EDA)는 `text_status`와 관계없이 전체 행을 `pblntf_ty`별로 센다.
 
-## issue_evidence (공동, P1)
+## issue_evidence (공동)
 
 급증 구간과 기사·공시의 연결. 자동 연결은 **후보**이며, 사람이 확인한 행만 `verified = 1`로 표시한다.
 `src/dart/issue_evidence.py`가 테이블 전체를 다시 쓴다. 사람 확인 결과는 git의 `data/labels/issue_evidence_review_v1.csv`에서 읽고, `evidence_id`는 정렬 순서로 매긴다. 그래서 두 사람의 DB가 같다 (판정 기준: `data/labels/README.md`).

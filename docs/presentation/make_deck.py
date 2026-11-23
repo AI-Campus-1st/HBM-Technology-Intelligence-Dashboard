@@ -247,7 +247,7 @@ def s04_pipeline(prs):
     box(s, M, 6.1, W - 2 * M, 0.75, fill=SURFACE)
     text(s, M + 0.35, 6.1, W - 2 * M - 0.7, 0.75,
          [[("대시보드  ", {"color": GREEN, "bold": True}),
-           ("요약 → 이슈 분석 → 공시 Q&A · 저장된 결과만 읽는다 (예시 질문도 저장된 답변) · 테스트 382개", {"color": TEXT2})]],
+           ("요약 → 이슈 분석 → 공시 Q&A · 저장된 결과만 읽는다 (예시 질문도 저장된 답변) · 테스트 389개", {"color": TEXT2})]],
          size=15, anchor=MSO_ANCHOR.MIDDLE)
 
 
@@ -507,7 +507,7 @@ def s13_next(prs):
     x = M + 7.4
     box(s, x, 1.75, W - M - x, 4.4, fill=SURFACE)
     text(s, x + 0.35, 1.98, 4, 0.35, "협업 방식", size=14, color=GREEN, bold=True)
-    for i, (v, lab) in enumerate([("70+", "머지한 PR — 브랜치에서 작업하고 PR로 합침"), ("382", "테스트 (API 호출 없이 실행)"),
+    for i, (v, lab) in enumerate([("70+", "머지한 PR — 브랜치에서 작업하고 PR로 합침"), ("389", "테스트 (API 호출 없이 실행)"),
                                   ("0", "주고받은 DB 파일 — 각자 다시 만들고 지문으로 확인")]):
         y = 2.45 + i * 1.2
         text(s, x + 0.35, y, 1.5, 0.7, v, size=32, bold=True)
