@@ -3,7 +3,7 @@
 ## 1. 파일 소유권
 - 모든 파일 맨 위 docstring에 `담당: 김한승 / 한도윤 / 공동`이 적혀 있다.
 - **자기 담당 파일만 수정한다.** 상대 담당 파일을 고쳐야 하면 먼저 말하거나 이슈를 남긴다.
-- `공동 (변경 시 PR로 합의)` 파일(`src/common/*`, `dashboard/components/filters.py`, `dashboard/app.py`)은 한 번에 한 사람만 수정한다.
+- `공동 (변경 시 PR로 합의)` 파일(`src/common/*`, `dashboard/app.py`, `dashboard/components/conclusion.py`·`summary.py`·`theme.py`)은 한 번에 한 사람만 수정한다.
 
 ## 2. 브랜치
 - `main`: 항상 실행 가능한 상태. 직접 push 금지.
@@ -39,7 +39,7 @@
 |---|---|---|
 | 뉴스 CSV (`data/raw/news/`) | 제공 | 둘 다 같은 제공 파일 사용 (`config.NEWS_CSV`) |
 | DART 원본 (`data/raw/dart/`) | 한도윤 | 수집 후 폴더를 zip으로 공유 드라이브에 올림. 김한승은 풀어서 `parse_documents`만 실행 (API 키·호출 불필요). 첨부 PDF(`data/raw/dart/attachments/`)도 같은 zip에 넣는다. 받은 쪽은 `collect_attachments --extract`로 텍스트만 추출 |
-| LLM 분류 결과 | 김한승 | 다시 만들면 비용이 들고 결과가 달라지므로 `data/processed/`에 파일(CSV 등)로 저장해 공유. DB 적재는 그 파일을 읽어서 한다 |
+| LLM 분류 결과 | 김한승 | 다시 만들면 비용이 들고 결과가 달라지므로 `outputs/reports/news_analysis_sent_v1.csv`·`sent_v2.csv`로 내보내 저장소에 커밋한다. 받은 쪽은 `classify --import`로 그 파일을 읽어 적재한다 |
 | 벡터 DB (`data/vectordb/`) | 한도윤 | `build_index` 후 폴더를 zip으로 공유 드라이브에 올림. 받은 쪽은 풀기만 한다 (다시 임베딩하지 않음). `data/vectordb/manifest.json`의 `chunks_fingerprint`가 상대 `build_index --dry-run`의 지문과 같으면 같은 청크로 만든 DB다 |
 
 - 사람이 만든 표본 검수 결과(`data/labels/`)만 git에 커밋한다. 나머지 `data/`는 커밋하지 않는다.

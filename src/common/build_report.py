@@ -67,9 +67,7 @@ def build(report_dir: Path = REPORT_DIR) -> str:
             anchor = base if n == 0 else f"{base}-{n}"  # 같은 제목이 또 나오면 GitHub처럼 -1, -2
             if level <= 2:
                 toc.append(f"{'  ' * (level - 1)}- [{text}](#{anchor})")
-    head = (f"# {TITLE}\n\n{SUBTITLE}\n\n"
-            f"> 이 파일은 `python -m src.common.build_report`로 만든다. 고칠 때는 `docs/report/`의 장 파일"
-            f"({len(bodies)}개)을 고친 뒤 다시 실행한다.\n\n## 목차\n\n" + "\n".join(toc) + "\n")
+    head = f"# {TITLE}\n\n{SUBTITLE}\n\n## 목차\n\n" + "\n".join(toc) + "\n"
     return "\n---\n\n".join([head, *bodies])
 
 
