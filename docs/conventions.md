@@ -19,7 +19,6 @@
 |---|---|
 | requirements.txt | `requirements/common·issue·disclosure.txt`로 나눠 각자 자기 파일에만 추가 |
 | 대시보드 한 파일 | `pages/`, `components/`, `data_access/`를 담당별 파일로 분리 |
-| 노트북(.ipynb) | `notebooks/김한승_issue`, `한도윤_disclosure`로 폴더 분리, 출력 지우고 커밋 |
 | 데이터·DB 파일 | git에 올리지 않고 수집 스크립트로 재생성 |
 | 회의록·일지 | `docs/daily_log/YYYY-MM-DD_김한승.md`처럼 날짜+사람별 파일 |
 | 리포트 | `docs/report/` 장별 파일로 분리 |

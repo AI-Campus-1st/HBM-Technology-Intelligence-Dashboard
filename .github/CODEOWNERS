@@ -14,7 +14,6 @@
 /dashboard/data_access/issue_loader.py @han0210
 /requirements/issue.txt             @han0210
 /tests/test_news.py                 @han0210
-/notebooks/김한승_issue/             @han0210
 
 # 한도윤 — 공시 분석
 /src/dart/                          @DoyoonHan
@@ -25,4 +24,3 @@
 /dashboard/data_access/disclosure_loader.py @DoyoonHan
 /requirements/disclosure.txt        @DoyoonHan
 /tests/test_dart.py                 @DoyoonHan
-/notebooks/한도윤_disclosure/        @DoyoonHan
